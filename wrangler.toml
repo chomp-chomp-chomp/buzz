@@ -1,0 +1,14 @@
+name = "chomp-buzz"
+compatibility_date = "2024-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+# D1 Database binding
+[[d1_databases]]
+binding = "DB"
+database_name = "chomp-buzz-db"
+database_id = "placeholder-replace-with-actual-id"
+
+# Environment variables (set via wrangler secret)
+# VAPID_PUBLIC_KEY - Web Push public key
+# VAPID_PRIVATE_KEY - Web Push private key
+# VAPID_SUBJECT - mailto: or https: URL
