@@ -2,42 +2,180 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+
+type AppState = "loading" | "install" | "pair" | "waiting" | "ready";
 
 export default function HomePage() {
-  const [cooldownRemaining, setCooldownRemaining] = useState<number | null>(null);
+  const [appState, setAppState] = useState<AppState>("loading");
+  const [cooldownRemaining, setCooldownRemaining] = useState<number>(0);
   const [isSending, setIsSending] = useState(false);
+  const [pairCode, setPairCode] = useState("");
+  const [inputCode, setInputCode] = useState("");
+  const [deviceId, setDeviceId] = useState<string>("");
 
-  // Optional: you can fetch /api/me here to get cooldownRemainingSeconds
-  // Keeping it minimal; wire it up once your API exists.
+  // Check if running in standalone mode (installed PWA)
+  const isStandalone = useCallback(() => {
+    if (typeof window === "undefined") return false;
+    return (
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (window.navigator as any).standalone === true
+    );
+  }, []);
+
+  // Generate or retrieve device ID
   useEffect(() => {
-    let timer: number | null = null;
-    if (cooldownRemaining !== null && cooldownRemaining > 0) {
-      timer = window.setInterval(() => {
-        setCooldownRemaining((prev) => {
-          if (prev === null) return prev;
-          return prev <= 1 ? 0 : prev - 1;
-        });
-      }, 1000);
+    let id = localStorage.getItem("deviceId");
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem("deviceId", id);
     }
-    return () => {
-      if (timer) window.clearInterval(timer);
-    };
+    setDeviceId(id);
+  }, []);
+
+  // Initialize app state
+  useEffect(() => {
+    async function init() {
+      // Check standalone mode
+      if (!isStandalone()) {
+        setAppState("install");
+        return;
+      }
+
+      // Register service worker
+      if ("serviceWorker" in navigator) {
+        try {
+          await navigator.serviceWorker.register("/sw.js");
+        } catch (e) {
+          console.error("SW registration failed:", e);
+        }
+      }
+
+      // Check pairing status
+      try {
+        const res = await fetch("/api/me");
+        const data = await res.json();
+
+        if (data.paired && data.hasPartner) {
+          setAppState("ready");
+          if (data.cooldownRemainingSeconds > 0) {
+            setCooldownRemaining(data.cooldownRemainingSeconds);
+          }
+          // Subscribe to push notifications
+          await subscribeToPush();
+        } else if (data.paired && !data.hasPartner) {
+          setAppState("waiting");
+          // Generate display code
+          const stored = localStorage.getItem("pairCode");
+          if (stored) setPairCode(stored);
+        } else {
+          setAppState("pair");
+        }
+      } catch (e) {
+        setAppState("pair");
+      }
+    }
+
+    if (deviceId) {
+      init();
+    }
+  }, [deviceId, isStandalone]);
+
+  // Cooldown timer
+  useEffect(() => {
+    if (cooldownRemaining <= 0) return;
+
+    const timer = setInterval(() => {
+      setCooldownRemaining((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
   }, [cooldownRemaining]);
 
-  const isCoolingDown = (cooldownRemaining ?? 0) > 0;
+  // Subscribe to push notifications
+  async function subscribeToPush() {
+    if (!("PushManager" in window)) return;
+    if (!("serviceWorker" in navigator)) return;
 
-  // Calm timing
-  const pressDurationMs = 120;
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      let subscription = await registration.pushManager.getSubscription();
 
+      if (!subscription) {
+        // Request permission
+        const permission = await Notification.requestPermission();
+        if (permission !== "granted") return;
+
+        // Get VAPID public key from server
+        // For now, skip subscription if not configured
+        // subscription = await registration.pushManager.subscribe({...});
+      }
+
+      if (subscription) {
+        await fetch("/api/subscribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            deviceId,
+            subscription: subscription.toJSON(),
+          }),
+        });
+      }
+    } catch (e) {
+      console.error("Push subscription failed:", e);
+    }
+  }
+
+  // Handle pairing
+  async function handlePair(code: string) {
+    try {
+      const res = await fetch("/api/pair", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, deviceId }),
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        if (data.paired) {
+          setAppState("ready");
+          await subscribeToPush();
+        } else if (data.waiting) {
+          setAppState("waiting");
+          localStorage.setItem("pairCode", code);
+          setPairCode(code);
+        }
+      }
+    } catch (e) {
+      console.error("Pairing failed:", e);
+    }
+  }
+
+  // Generate new code
+  async function handleGenerateCode() {
+    try {
+      const res = await fetch("/api/pair");
+      const data = await res.json();
+      if (data.code) {
+        handlePair(data.code);
+      }
+    } catch (e) {
+      console.error("Code generation failed:", e);
+    }
+  }
+
+  // Handle buzz
   async function handleBuzz() {
-    if (isSending || isCoolingDown) return;
+    if (isSending || cooldownRemaining > 0) return;
     setIsSending(true);
 
     try {
-      // Call your Worker endpoint. Expect:
-      // - 200 { cooldownSeconds: 69 }
-      // - 429 { remainingSeconds: n }
       const res = await fetch("/api/buzz", { method: "POST" });
 
       if (res.status === 429) {
@@ -47,20 +185,164 @@ export default function HomePage() {
         return;
       }
 
-      if (!res.ok) {
-        // Fail quietly; this app avoids theatrics.
-        return;
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        const cd = Number(data?.cooldownSeconds ?? 69);
+        setCooldownRemaining(cd);
       }
-
-      const data = await res.json().catch(() => null);
-      const cd = Number(data?.cooldownSeconds ?? 69);
-      setCooldownRemaining(cd);
     } finally {
-      // Slight delay so “press” feels real
-      window.setTimeout(() => setIsSending(false), pressDurationMs);
+      setTimeout(() => setIsSending(false), 120);
     }
   }
 
+  // Poll for partner when waiting
+  useEffect(() => {
+    if (appState !== "waiting") return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch("/api/me");
+        const data = await res.json();
+        if (data.paired && data.hasPartner) {
+          setAppState("ready");
+          await subscribeToPush();
+        }
+      } catch (e) {
+        // Ignore
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [appState, deviceId]);
+
+  const isCoolingDown = cooldownRemaining > 0;
+
+  // Render based on state
+  if (appState === "loading") {
+    return (
+      <main style={styles.page}>
+        <div style={styles.centerWrap}>
+          <div style={styles.status}>loading</div>
+        </div>
+      </main>
+    );
+  }
+
+  if (appState === "install") {
+    return (
+      <main style={styles.page}>
+        <div style={styles.centerWrap}>
+          <Image
+            src="/heart-cookie.png"
+            alt="Heart cookie"
+            width={160}
+            height={160}
+            priority
+            style={{ opacity: 0.6 }}
+          />
+          <div style={{ ...styles.status, marginTop: 24 }}>
+            Add to Home Screen to continue
+          </div>
+          <div style={styles.installHint}>
+            Tap the share button, then &quot;Add to Home Screen&quot;
+          </div>
+        </div>
+        <footer style={styles.footer}>
+          <Link href="/about" style={styles.footerLink}>
+            About
+          </Link>
+        </footer>
+      </main>
+    );
+  }
+
+  if (appState === "pair") {
+    return (
+      <main style={styles.page}>
+        <div style={styles.centerWrap}>
+          <Image
+            src="/heart-cookie.png"
+            alt="Heart cookie"
+            width={120}
+            height={120}
+            priority
+            style={{ opacity: 0.5 }}
+          />
+
+          <div style={styles.pairSection}>
+            <div style={styles.pairLabel}>Enter a code to pair</div>
+            <input
+              type="text"
+              value={inputCode}
+              onChange={(e) => setInputCode(e.target.value.toUpperCase())}
+              placeholder="XXXX-XXXX"
+              maxLength={9}
+              style={styles.pairInput}
+              autoCapitalize="characters"
+              autoCorrect="off"
+              autoComplete="off"
+            />
+            <button
+              type="button"
+              onClick={() => handlePair(inputCode)}
+              disabled={inputCode.replace(/-/g, "").length !== 8}
+              style={{
+                ...styles.pairButton,
+                opacity: inputCode.replace(/-/g, "").length === 8 ? 1 : 0.5,
+              }}
+            >
+              Pair
+            </button>
+          </div>
+
+          <div style={styles.dividerText}>or</div>
+
+          <button
+            type="button"
+            onClick={handleGenerateCode}
+            style={styles.generateButton}
+          >
+            Create new pair
+          </button>
+        </div>
+        <footer style={styles.footer}>
+          <Link href="/about" style={styles.footerLink}>
+            About
+          </Link>
+        </footer>
+      </main>
+    );
+  }
+
+  if (appState === "waiting") {
+    return (
+      <main style={styles.page}>
+        <div style={styles.centerWrap}>
+          <Image
+            src="/heart-cookie.png"
+            alt="Heart cookie"
+            width={160}
+            height={160}
+            priority
+            style={{ opacity: 0.5 }}
+          />
+
+          <div style={styles.waitingSection}>
+            <div style={styles.waitingLabel}>Share this code with your person</div>
+            <div style={styles.codeDisplay}>{formatCode(pairCode)}</div>
+            <div style={styles.waitingHint}>Waiting for them to join...</div>
+          </div>
+        </div>
+        <footer style={styles.footer}>
+          <Link href="/about" style={styles.footerLink}>
+            About
+          </Link>
+        </footer>
+      </main>
+    );
+  }
+
+  // Ready state - main buzz interface
   return (
     <main style={styles.page}>
       <div style={styles.centerWrap}>
@@ -81,17 +363,14 @@ export default function HomePage() {
             width={240}
             height={240}
             priority
-            style={styles.heartImage as any}
+            style={styles.heartImage as React.CSSProperties}
           />
-          {isCoolingDown && (
-            <div style={styles.cooldownBadge}>
-              {cooldownRemaining}s
-            </div>
-          )}
         </button>
 
         <div style={styles.status}>
-          {isCoolingDown ? `cooling down: ${cooldownRemaining}s` : "ready to buzz"}
+          {isCoolingDown
+            ? `cooling down: ${cooldownRemaining}s`
+            : "ready to buzz"}
         </div>
       </div>
 
@@ -102,6 +381,12 @@ export default function HomePage() {
       </footer>
     </main>
   );
+}
+
+function formatCode(code: string): string {
+  const clean = code.replace(/-/g, "").toUpperCase();
+  if (clean.length <= 4) return clean;
+  return `${clean.slice(0, 4)}-${clean.slice(4, 8)}`;
 }
 
 const styles: Record<string, React.CSSProperties> = {
@@ -126,24 +411,14 @@ const styles: Record<string, React.CSSProperties> = {
     background: "transparent",
     padding: 0,
     cursor: "pointer",
-    transition: "transform 120ms cubic-bezier(0.2, 0.0, 0.0, 1.0), opacity 120ms linear",
+    transition:
+      "transform 120ms cubic-bezier(0.2, 0.0, 0.0, 1.0), opacity 120ms linear",
     position: "relative",
     WebkitTapHighlightColor: "transparent",
   },
   heartImage: {
     display: "block",
     userSelect: "none",
-  },
-  cooldownBadge: {
-    position: "absolute",
-    right: -8,
-    bottom: -8,
-    fontSize: 12,
-    padding: "6px 8px",
-    borderRadius: 999,
-    border: "1px solid rgba(0,0,0,0.12)",
-    background: "rgba(255,255,255,0.95)",
-    opacity: 0.9,
   },
   status: {
     fontSize: 14,
@@ -159,5 +434,79 @@ const styles: Record<string, React.CSSProperties> = {
     opacity: 0.7,
     textDecoration: "none",
     color: "inherit",
+  },
+  installHint: {
+    fontSize: 12,
+    opacity: 0.6,
+    textAlign: "center",
+    maxWidth: 240,
+    marginTop: 8,
+  },
+  pairSection: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 24,
+  },
+  pairLabel: {
+    fontSize: 14,
+    opacity: 0.75,
+  },
+  pairInput: {
+    fontSize: 20,
+    fontFamily: "monospace",
+    textAlign: "center",
+    padding: "12px 16px",
+    border: "1px solid rgba(0,0,0,0.15)",
+    borderRadius: 8,
+    outline: "none",
+    width: 180,
+    letterSpacing: 2,
+  },
+  pairButton: {
+    fontSize: 14,
+    padding: "10px 24px",
+    border: "1px solid rgba(0,0,0,0.2)",
+    borderRadius: 6,
+    background: "#fff",
+    cursor: "pointer",
+  },
+  dividerText: {
+    fontSize: 12,
+    opacity: 0.5,
+    margin: "16px 0",
+  },
+  generateButton: {
+    fontSize: 14,
+    padding: "10px 20px",
+    border: "none",
+    borderRadius: 6,
+    background: "rgba(0,0,0,0.06)",
+    cursor: "pointer",
+  },
+  waitingSection: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 12,
+    marginTop: 24,
+  },
+  waitingLabel: {
+    fontSize: 14,
+    opacity: 0.75,
+  },
+  codeDisplay: {
+    fontSize: 28,
+    fontFamily: "monospace",
+    letterSpacing: 3,
+    padding: "16px 24px",
+    background: "rgba(0,0,0,0.03)",
+    borderRadius: 8,
+  },
+  waitingHint: {
+    fontSize: 12,
+    opacity: 0.5,
+    marginTop: 8,
   },
 };
