@@ -6,9 +6,12 @@ import { useCallback, useEffect, useState } from "react";
 
 type AppState = "loading" | "install" | "pair" | "waiting" | "ready";
 
+const OVEN_SECONDS = 108;
+
 export default function HomePage() {
   const [appState, setAppState] = useState<AppState>("loading");
-  const [cooldownRemaining, setCooldownRemaining] = useState<number>(0);
+  const [ovenRemaining, setOvenRemaining] = useState<number>(0);
+  const [lastChompRelative, setLastChompRelative] = useState<string>("never");
   const [isSending, setIsSending] = useState(false);
   const [pairCode, setPairCode] = useState("");
   const [inputCode, setInputCode] = useState("");
@@ -31,6 +34,20 @@ export default function HomePage() {
       localStorage.setItem("deviceId", id);
     }
     setDeviceId(id);
+  }, []);
+
+  // Fetch status from server
+  const fetchStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/status");
+      const data = await res.json();
+      if (data.ovenRemainingSeconds > 0) {
+        setOvenRemaining(data.ovenRemainingSeconds);
+      }
+      setLastChompRelative(data.lastChompRelative || "never");
+    } catch (e) {
+      // Ignore
+    }
   }, []);
 
   // Initialize app state
@@ -58,14 +75,12 @@ export default function HomePage() {
 
         if (data.paired && data.hasPartner) {
           setAppState("ready");
-          if (data.cooldownRemainingSeconds > 0) {
-            setCooldownRemaining(data.cooldownRemainingSeconds);
-          }
+          // Fetch status for oven state and last chomp
+          await fetchStatus();
           // Subscribe to push notifications
           await subscribeToPush();
         } else if (data.paired && !data.hasPartner) {
           setAppState("waiting");
-          // Generate display code
           const stored = localStorage.getItem("pairCode");
           if (stored) setPairCode(stored);
         } else {
@@ -79,14 +94,30 @@ export default function HomePage() {
     if (deviceId) {
       init();
     }
-  }, [deviceId, isStandalone]);
+  }, [deviceId, isStandalone, fetchStatus]);
 
-  // Cooldown timer
+  // Listen for visibility changes to refetch status
   useEffect(() => {
-    if (cooldownRemaining <= 0) return;
+    if (appState !== "ready") return;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        fetchStatus();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [appState, fetchStatus]);
+
+  // Oven timer countdown
+  useEffect(() => {
+    if (ovenRemaining <= 0) return;
 
     const timer = setInterval(() => {
-      setCooldownRemaining((prev) => {
+      setOvenRemaining((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
           return 0;
@@ -96,7 +127,7 @@ export default function HomePage() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [cooldownRemaining]);
+  }, [ovenRemaining]);
 
   // Subscribe to push notifications
   async function subscribeToPush() {
@@ -108,13 +139,8 @@ export default function HomePage() {
       let subscription = await registration.pushManager.getSubscription();
 
       if (!subscription) {
-        // Request permission
         const permission = await Notification.requestPermission();
         if (permission !== "granted") return;
-
-        // Get VAPID public key from server
-        // For now, skip subscription if not configured
-        // subscription = await registration.pushManager.subscribe({...});
       }
 
       if (subscription) {
@@ -145,6 +171,7 @@ export default function HomePage() {
       if (data.success) {
         if (data.paired) {
           setAppState("ready");
+          await fetchStatus();
           await subscribeToPush();
         } else if (data.waiting) {
           setAppState("waiting");
@@ -170,9 +197,9 @@ export default function HomePage() {
     }
   }
 
-  // Handle buzz
-  async function handleBuzz() {
-    if (isSending || cooldownRemaining > 0) return;
+  // Handle chomp
+  async function handleChomp() {
+    if (isSending || ovenRemaining > 0) return;
     setIsSending(true);
 
     try {
@@ -181,14 +208,15 @@ export default function HomePage() {
       if (res.status === 429) {
         const data = await res.json().catch(() => null);
         const remaining = Number(data?.remainingSeconds ?? 0);
-        setCooldownRemaining(Math.max(0, remaining));
+        setOvenRemaining(Math.max(0, remaining));
         return;
       }
 
       if (res.ok) {
         const data = await res.json().catch(() => null);
-        const cd = Number(data?.cooldownSeconds ?? 69);
-        setCooldownRemaining(cd);
+        const oven = Number(data?.ovenSeconds ?? OVEN_SECONDS);
+        setOvenRemaining(oven);
+        setLastChompRelative("just now");
       }
     } finally {
       setTimeout(() => setIsSending(false), 120);
@@ -205,6 +233,7 @@ export default function HomePage() {
         const data = await res.json();
         if (data.paired && data.hasPartner) {
           setAppState("ready");
+          await fetchStatus();
           await subscribeToPush();
         }
       } catch (e) {
@@ -213,9 +242,9 @@ export default function HomePage() {
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [appState, deviceId]);
+  }, [appState, deviceId, fetchStatus]);
 
-  const isCoolingDown = cooldownRemaining > 0;
+  const inOven = ovenRemaining > 0;
 
   // Render based on state
   if (appState === "loading") {
@@ -342,19 +371,19 @@ export default function HomePage() {
     );
   }
 
-  // Ready state - main buzz interface
+  // Ready state - main chomp interface
   return (
     <main style={styles.page}>
       <div style={styles.centerWrap}>
         <button
           type="button"
-          onClick={handleBuzz}
-          disabled={isCoolingDown || isSending}
-          aria-disabled={isCoolingDown || isSending}
+          onClick={handleChomp}
+          disabled={inOven || isSending}
+          aria-disabled={inOven || isSending}
           style={{
             ...styles.heartButton,
             transform: isSending ? "scale(0.98)" : "scale(1)",
-            opacity: isCoolingDown ? 0.7 : 1,
+            opacity: inOven ? 0.7 : 1,
           }}
         >
           <Image
@@ -367,10 +396,11 @@ export default function HomePage() {
           />
         </button>
 
-        <div style={styles.status}>
-          {isCoolingDown
-            ? `cooling down: ${cooldownRemaining}s`
-            : "ready to buzz"}
+        <div style={styles.statusWrap}>
+          <div style={styles.status}>
+            {inOven ? `in the oven • ${ovenRemaining} seconds` : "Cooling"}
+          </div>
+          <div style={styles.lastChomp}>last chomp: {lastChompRelative}</div>
         </div>
       </div>
 
@@ -420,9 +450,19 @@ const styles: Record<string, React.CSSProperties> = {
     display: "block",
     userSelect: "none",
   },
+  statusWrap: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 4,
+  },
   status: {
     fontSize: 14,
     opacity: 0.85,
+  },
+  lastChomp: {
+    fontSize: 12,
+    opacity: 0.55,
   },
   footer: {
     padding: "16px 18px",

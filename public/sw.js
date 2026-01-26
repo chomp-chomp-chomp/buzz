@@ -1,7 +1,7 @@
-// Chomp Buzz Service Worker
+// Cooling Service Worker
 // Minimal service worker for push notifications
 
-const CACHE_NAME = 'chomp-buzz-v1';
+const CACHE_NAME = 'cooling-v1';
 
 // Install event - cache minimal assets
 self.addEventListener('install', (event) => {
@@ -30,15 +30,15 @@ self.addEventListener('push', (event) => {
   try {
     data = event.data.json();
   } catch (e) {
-    data = { title: 'Chomp Buzz', body: event.data.text() };
+    data = { title: 'Chomp', body: '' };
   }
 
-  const title = data.title || 'Chomp Buzz';
+  const title = data.title || 'Chomp';
   const options = {
-    body: data.body || 'buzz',
+    body: data.body || '',
     icon: '/heart-cookie.png',
     badge: '/heart-cookie.png',
-    tag: 'chomp-buzz',
+    tag: 'cooling-chomp',
     renotify: true,
     requireInteraction: false,
     silent: false,

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { Env, Member, MeResponse } from '@/lib/types';
 
-const COOLDOWN_SECONDS = 69;
+const OVEN_SECONDS = 108;
 
 export const runtime = 'edge';
 
@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     if (!deviceId) {
       return NextResponse.json<MeResponse>({
         paired: false,
-        cooldownRemainingSeconds: 0,
+        ovenRemainingSeconds: 0,
         hasPartner: false,
       });
     }
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
       // Development mode
       return NextResponse.json<MeResponse>({
         paired: true,
-        cooldownRemainingSeconds: 0,
+        ovenRemainingSeconds: 0,
         hasPartner: true,
       });
     }
@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
     if (!member) {
       return NextResponse.json<MeResponse>({
         paired: false,
-        cooldownRemainingSeconds: 0,
+        ovenRemainingSeconds: 0,
         hasPartner: false,
       });
     }
@@ -50,26 +50,26 @@ export async function GET(request: NextRequest) {
       .bind(member.pair_id, deviceId)
       .first<Member>();
 
-    // Calculate cooldown
-    let cooldownRemaining = 0;
-    if (member.last_buzz_at) {
+    // Calculate oven remaining
+    let ovenRemaining = 0;
+    if (member.last_chomp_at) {
       const now = Math.floor(Date.now() / 1000);
-      const elapsed = now - member.last_buzz_at;
-      if (elapsed < COOLDOWN_SECONDS) {
-        cooldownRemaining = COOLDOWN_SECONDS - elapsed;
+      const elapsed = now - member.last_chomp_at;
+      if (elapsed < OVEN_SECONDS) {
+        ovenRemaining = OVEN_SECONDS - elapsed;
       }
     }
 
     return NextResponse.json<MeResponse>({
       paired: true,
-      cooldownRemainingSeconds: cooldownRemaining,
+      ovenRemainingSeconds: ovenRemaining,
       hasPartner: !!partner,
     });
   } catch (error) {
     console.error('Me error:', error);
     return NextResponse.json<MeResponse>({
       paired: false,
-      cooldownRemainingSeconds: 0,
+      ovenRemainingSeconds: 0,
       hasPartner: false,
     });
   }

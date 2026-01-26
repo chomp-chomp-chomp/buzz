@@ -1,7 +1,7 @@
 {
-  "name": "Chomp Buzz",
-  "short_name": "Chomp",
-  "description": "A quiet buzz for two people",
+  "name": "Cooling",
+  "short_name": "Cooling",
+  "description": "A quiet chomp for two people",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
