@@ -8,6 +8,11 @@ interface PushPayload {
   body: string;
 }
 
+// Helper to convert Uint8Array to ArrayBuffer (for strict TypeScript)
+function toArrayBuffer(arr: Uint8Array): ArrayBuffer {
+  return arr.buffer.slice(arr.byteOffset, arr.byteOffset + arr.byteLength) as ArrayBuffer;
+}
+
 /**
  * Send a push notification to a member
  * Uses the Web Push protocol with VAPID authentication
@@ -58,10 +63,7 @@ export async function sendPushNotification(
         'TTL': '86400',
         'Authorization': `vapid t=${jwt}, k=${vapidPublicKey}`,
       },
-      body: encryptedPayload.buffer.slice(
-        encryptedPayload.byteOffset,
-        encryptedPayload.byteOffset + encryptedPayload.byteLength
-      ) as ArrayBuffer,
+      body: toArrayBuffer(encryptedPayload),
     });
 
     return response.ok || response.status === 201;
@@ -159,21 +161,22 @@ async function encryptPayload(
   // Encrypt with AES-GCM
   const paddedPayload = addPadding(new TextEncoder().encode(payload));
   const encrypted = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv: nonce, tagLength: 128 },
+    { name: 'AES-GCM', iv: toArrayBuffer(nonce), tagLength: 128 },
     key,
-    paddedPayload
+    toArrayBuffer(paddedPayload)
   );
 
   // Build the aes128gcm content
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const recordSize = new Uint8Array(4);
-  new DataView(recordSize.buffer as ArrayBuffer).setUint32(0, 4096, false);
+  new DataView(toArrayBuffer(recordSize)).setUint32(0, 4096, false);
 
+  const ephemeralPubKeyBytes = new Uint8Array(ephemeralPublicKey);
   const header = new Uint8Array(86);
   header.set(salt, 0);
   header.set(recordSize, 16);
   header[20] = 65; // Public key length
-  header.set(new Uint8Array(ephemeralPublicKey as ArrayBuffer), 21);
+  header.set(ephemeralPubKeyBytes, 21);
 
   const result = new Uint8Array(header.length + encrypted.byteLength);
   result.set(header);
@@ -203,7 +206,7 @@ async function deriveKeyAndNonce(
   // PRK = HKDF-Extract(auth_secret, shared_secret)
   const info = createInfo('WebPush: info\0', new Uint8Array(subscriberPublicKey), new Uint8Array(ephemeralPublicKey));
   const prkBits = await crypto.subtle.deriveBits(
-    { name: 'HKDF', salt: authSecret, info, hash: 'SHA-256' },
+    { name: 'HKDF', salt: authSecret, info: toArrayBuffer(info), hash: 'SHA-256' },
     sharedKey,
     256
   );
@@ -219,7 +222,7 @@ async function deriveKeyAndNonce(
   // Content encryption key
   const cekInfo = new TextEncoder().encode('Content-Encoding: aes128gcm\0');
   const key = await crypto.subtle.deriveKey(
-    { name: 'HKDF', salt: new Uint8Array(0), info: cekInfo, hash: 'SHA-256' },
+    { name: 'HKDF', salt: new ArrayBuffer(0), info: toArrayBuffer(cekInfo), hash: 'SHA-256' },
     prkKey,
     { name: 'AES-GCM', length: 128 },
     false,
@@ -229,7 +232,7 @@ async function deriveKeyAndNonce(
   // Nonce
   const nonceInfo = new TextEncoder().encode('Content-Encoding: nonce\0');
   const nonceBits = await crypto.subtle.deriveBits(
-    { name: 'HKDF', salt: new Uint8Array(0), info: nonceInfo, hash: 'SHA-256' },
+    { name: 'HKDF', salt: new ArrayBuffer(0), info: toArrayBuffer(nonceInfo), hash: 'SHA-256' },
     prkKey,
     96
   );
@@ -296,5 +299,5 @@ function base64UrlDecode(input: string): ArrayBuffer {
   for (let i = 0; i < binary.length; i++) {
     bytes[i] = binary.charCodeAt(i);
   }
-  return bytes.buffer as ArrayBuffer;
+  return bytes.buffer.slice(0, bytes.length) as ArrayBuffer;
 }
