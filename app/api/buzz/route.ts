@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { Env, Member, BuzzResponse } from '@/lib/types';
+import type { Env, Member, ChompResponse } from '@/lib/types';
 import { sendPushNotification } from '@/lib/push';
 
-// Cooldown duration in seconds
-const COOLDOWN_SECONDS = 69;
+// Oven duration in seconds
+const OVEN_SECONDS = 108;
 
 export const runtime = 'edge';
 
@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
     // Get device ID from cookie
     const deviceId = request.cookies.get('deviceId')?.value;
     if (!deviceId) {
-      return NextResponse.json<BuzzResponse>(
+      return NextResponse.json<ChompResponse>(
         { success: false, error: 'Not authenticated' },
         { status: 401 }
       );
@@ -24,9 +24,9 @@ export async function POST(request: NextRequest) {
 
     if (!db) {
       // Development mode - return mock response
-      return NextResponse.json<BuzzResponse>({
+      return NextResponse.json<ChompResponse>({
         success: true,
-        cooldownSeconds: COOLDOWN_SECONDS,
+        ovenSeconds: OVEN_SECONDS,
       });
     }
 
@@ -37,19 +37,19 @@ export async function POST(request: NextRequest) {
       .first<Member>();
 
     if (!sender) {
-      return NextResponse.json<BuzzResponse>(
+      return NextResponse.json<ChompResponse>(
         { success: false, error: 'Not paired' },
         { status: 403 }
       );
     }
 
-    // Check cooldown
+    // Check if sender is still in oven
     const now = Math.floor(Date.now() / 1000);
-    if (sender.last_buzz_at) {
-      const elapsed = now - sender.last_buzz_at;
-      if (elapsed < COOLDOWN_SECONDS) {
-        const remaining = COOLDOWN_SECONDS - elapsed;
-        return NextResponse.json<BuzzResponse>(
+    if (sender.last_chomp_at) {
+      const elapsed = now - sender.last_chomp_at;
+      if (elapsed < OVEN_SECONDS) {
+        const remaining = OVEN_SECONDS - elapsed;
+        return NextResponse.json<ChompResponse>(
           { success: false, remainingSeconds: remaining },
           { status: 429 }
         );
@@ -63,36 +63,36 @@ export async function POST(request: NextRequest) {
       .first<Member>();
 
     if (!partner) {
-      return NextResponse.json<BuzzResponse>(
+      return NextResponse.json<ChompResponse>(
         { success: false, error: 'Partner not found' },
         { status: 404 }
       );
     }
 
-    // Update sender's last buzz time
-    await db
-      .prepare('UPDATE members SET last_buzz_at = ? WHERE id = ?')
-      .bind(now, sender.id)
-      .run();
+    // Update sender's last chomp time and pair's last chomp time
+    await db.batch([
+      db.prepare('UPDATE members SET last_chomp_at = ? WHERE id = ?').bind(now, sender.id),
+      db.prepare('UPDATE pairs SET last_chomp_at = ? WHERE id = ?').bind(now, sender.pair_id),
+    ]);
 
-    // Send push notification to partner
+    // Send push notification to partner (title: "Chomp", empty body)
     if (partner.push_endpoint && env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY) {
       await sendPushNotification(
         partner,
-        { title: 'Chomp Buzz', body: 'buzz' },
+        { title: 'Chomp', body: '' },
         env.VAPID_PUBLIC_KEY,
         env.VAPID_PRIVATE_KEY,
-        env.VAPID_SUBJECT || 'mailto:buzz@chomp.buzz'
+        env.VAPID_SUBJECT || 'mailto:hello@cooling.app'
       );
     }
 
-    return NextResponse.json<BuzzResponse>({
+    return NextResponse.json<ChompResponse>({
       success: true,
-      cooldownSeconds: COOLDOWN_SECONDS,
+      ovenSeconds: OVEN_SECONDS,
     });
   } catch (error) {
-    console.error('Buzz error:', error);
-    return NextResponse.json<BuzzResponse>(
+    console.error('Chomp error:', error);
+    return NextResponse.json<ChompResponse>(
       { success: false, error: 'Internal error' },
       { status: 500 }
     );

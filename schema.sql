@@ -1,11 +1,13 @@
--- Chomp Buzz D1 Database Schema
--- Minimal schema for two-person pairing and buzz functionality
+-- Cooling D1 Database Schema
+-- Minimal schema for two-person pairing and chomp functionality
 
 -- Pairs table: stores paired connections
 -- pair_code_hash: SHA-256 hash of the pairing code
+-- last_chomp_at: timestamp of most recent chomp by either member (for relative display)
 CREATE TABLE IF NOT EXISTS pairs (
   id TEXT PRIMARY KEY,
   pair_code_hash TEXT UNIQUE NOT NULL,
+  last_chomp_at INTEGER,
   created_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
@@ -17,7 +19,7 @@ CREATE TABLE IF NOT EXISTS members (
   push_endpoint TEXT,
   push_p256dh TEXT,
   push_auth TEXT,
-  last_buzz_at INTEGER,
+  last_chomp_at INTEGER,
   created_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 

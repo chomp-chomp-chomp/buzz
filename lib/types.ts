@@ -10,6 +10,7 @@ export interface Env {
 export interface Pair {
   id: string;
   pair_code_hash: string;
+  last_chomp_at: number | null;
   created_at: number;
 }
 
@@ -20,7 +21,7 @@ export interface Member {
   push_endpoint: string | null;
   push_p256dh: string | null;
   push_auth: string | null;
-  last_buzz_at: number | null;
+  last_chomp_at: number | null;
   created_at: number;
 }
 
@@ -37,11 +38,17 @@ export interface PairResponse {
   error?: string;
 }
 
-export interface BuzzResponse {
+export interface ChompResponse {
   success: boolean;
-  cooldownSeconds?: number;
+  ovenSeconds?: number;
   remainingSeconds?: number;
   error?: string;
+}
+
+export interface StatusResponse {
+  state: 'cooling' | 'oven';
+  ovenRemainingSeconds: number;
+  lastChompRelative: string;
 }
 
 export interface SubscribeRequest {
@@ -51,7 +58,7 @@ export interface SubscribeRequest {
 
 export interface MeResponse {
   paired: boolean;
-  cooldownRemainingSeconds: number;
+  ovenRemainingSeconds: number;
   hasPartner: boolean;
 }
 

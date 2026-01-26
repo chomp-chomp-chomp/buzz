@@ -11,7 +11,7 @@ type Section = {
   defaultOpen?: boolean;
 };
 
-const README_MD = `Chomp Buzz is a small app for two people.
+const README_MD = `Cooling is a small app for two people.
 
 It does one thing:
 it lets you send a simple signal to someone you care about.
@@ -67,7 +67,7 @@ It absorbs anxiety so the relationship does not have to.
 You press the button
 so you don’t have to press the other person.
 
-Chomp Buzz is limited to two people.
+Cooling is limited to two people.
 The moment a third appears,
 the gesture becomes performance.
 Desire dies in public.
@@ -89,19 +89,19 @@ delete it.
 This app is complete because it does not progress.
 `;
 
-const TOS_MD = `By using Chomp Buzz, you agree to these terms.
+const TOS_MD = `By using Cooling, you agree to these terms.
 
 If you do not agree, do not use the app.
 If you use the app, you have already agreed.
 
-Chomp Buzz provides a single function:
+Cooling provides a single function:
 the ability to send a buzz.
 
 A buzz is not a request.
 A buzz is not a promise.
 A buzz is not a debt.
 
-Chomp Buzz does not obligate:
+Cooling does not obligate:
 a response,
 an explanation,
 or continuation.
@@ -109,7 +109,7 @@ or continuation.
 A mandatory waiting period exists between buzzes.
 This is intentional.
 
-Chomp Buzz collects only the minimum data required to function.
+Cooling collects only the minimum data required to function.
 If this ever changes, the service has failed.
 
 No emotional outcomes are guaranteed.

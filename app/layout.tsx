@@ -2,13 +2,13 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Chomp Buzz",
-  description: "A quiet buzz for two people",
+  title: "Cooling",
+  description: "A quiet chomp for two people",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "Chomp Buzz",
+    title: "Cooling",
   },
   other: {
     "mobile-web-app-capable": "yes",
