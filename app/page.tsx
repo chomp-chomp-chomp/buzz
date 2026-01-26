@@ -26,13 +26,15 @@ export default function HomePage() {
     );
   }, []);
 
-  // Generate or retrieve device ID
+  // Generate or retrieve device ID and set cookie
   useEffect(() => {
     let id = localStorage.getItem("deviceId");
     if (!id) {
       id = crypto.randomUUID();
       localStorage.setItem("deviceId", id);
     }
+    // Set cookie for API routes (expires in 1 year)
+    document.cookie = `deviceId=${id}; path=/; max-age=31536000; SameSite=Strict`;
     setDeviceId(id);
   }, []);
 
