@@ -3,6 +3,11 @@ import Link from "next/link";
 export default function AboutPage() {
   return (
     <main style={styles.page}>
+      <nav style={styles.nav}>
+        <Link href="/" style={styles.backLink}>
+          ← Back
+        </Link>
+      </nav>
       <div style={styles.container}>
         <div style={styles.line1}>
           This app is complete. The rest is documentation.
@@ -24,15 +29,26 @@ const styles: Record<string, React.CSSProperties> = {
     minHeight: "100vh",
     color: "#111",
     display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
+    flexDirection: "column",
+  },
+  nav: {
+    padding: "16px 18px",
+  },
+  backLink: {
+    fontSize: 13,
+    textDecoration: "none",
+    color: "inherit",
+    opacity: 0.6,
   },
   container: {
-    width: "100%",
-    maxWidth: 520,
-    padding: "24px 18px",
+    flex: 1,
     display: "flex",
     flexDirection: "column",
+    justifyContent: "center",
+    width: "100%",
+    maxWidth: 520,
+    margin: "0 auto",
+    padding: "24px 18px",
     gap: 14,
   },
   line1: {
