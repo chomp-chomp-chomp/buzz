@@ -58,7 +58,10 @@ export async function sendPushNotification(
         'TTL': '86400',
         'Authorization': `vapid t=${jwt}, k=${vapidPublicKey}`,
       },
-      body: encryptedPayload,
+      body: encryptedPayload.buffer.slice(
+        encryptedPayload.byteOffset,
+        encryptedPayload.byteOffset + encryptedPayload.byteLength
+      ) as ArrayBuffer,
     });
 
     return response.ok || response.status === 201;
