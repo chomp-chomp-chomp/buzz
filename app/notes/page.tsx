@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import React, { useMemo, useState } from "react";
 
 type SectionKey = "readme" | "versionNotes" | "tos" | "antiFaq" | "knownIssues";
@@ -209,6 +210,11 @@ export default function Notes() {
   return (
     <main style={styles.page}>
       <div style={styles.container}>
+        <nav style={styles.nav}>
+          <Link href="/" style={styles.backLink}>
+            ← Back
+          </Link>
+        </nav>
         <h1 style={styles.h1}>Notes</h1>
 
         <div style={styles.accordion} role="list">
@@ -300,6 +306,15 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: 680,
     margin: "0 auto",
     padding: "24px 18px 48px",
+  },
+  nav: {
+    marginBottom: 8,
+  },
+  backLink: {
+    fontSize: 13,
+    textDecoration: "none",
+    color: "inherit",
+    opacity: 0.6,
   },
   h1: {
     fontSize: 20,
