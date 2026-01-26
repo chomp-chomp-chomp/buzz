@@ -19,7 +19,6 @@ export async function POST(request: NextRequest) {
     }
 
     // Get Cloudflare bindings
-    // @ts-expect-error - Cloudflare bindings
     const env: Env = (request as any).cf?.env || process.env;
     const db = env.DB;
 
