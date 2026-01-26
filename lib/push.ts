@@ -147,9 +147,9 @@ async function encryptPayload(
 
   // Derive encryption key and nonce using HKDF
   const { key, nonce } = await deriveKeyAndNonce(
-    new Uint8Array(sharedSecret),
+    sharedSecret,
     authSecret,
-    new Uint8Array(ephemeralPublicKey),
+    ephemeralPublicKey,
     subscriberPublicKey
   );
 
@@ -164,13 +164,13 @@ async function encryptPayload(
   // Build the aes128gcm content
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const recordSize = new Uint8Array(4);
-  new DataView(recordSize.buffer).setUint32(0, 4096, false);
+  new DataView(recordSize.buffer as ArrayBuffer).setUint32(0, 4096, false);
 
   const header = new Uint8Array(86);
   header.set(salt, 0);
   header.set(recordSize, 16);
   header[20] = 65; // Public key length
-  header.set(new Uint8Array(ephemeralPublicKey), 21);
+  header.set(new Uint8Array(ephemeralPublicKey as ArrayBuffer), 21);
 
   const result = new Uint8Array(header.length + encrypted.byteLength);
   result.set(header);
@@ -183,10 +183,10 @@ async function encryptPayload(
  * Derive encryption key and nonce using HKDF
  */
 async function deriveKeyAndNonce(
-  sharedSecret: Uint8Array,
-  authSecret: Uint8Array,
-  ephemeralPublicKey: Uint8Array,
-  subscriberPublicKey: Uint8Array
+  sharedSecret: ArrayBuffer,
+  authSecret: ArrayBuffer,
+  ephemeralPublicKey: ArrayBuffer,
+  subscriberPublicKey: ArrayBuffer
 ): Promise<{ key: CryptoKey; nonce: Uint8Array }> {
   // Import shared secret for HKDF
   const sharedKey = await crypto.subtle.importKey(
@@ -198,7 +198,7 @@ async function deriveKeyAndNonce(
   );
 
   // PRK = HKDF-Extract(auth_secret, shared_secret)
-  const info = createInfo('WebPush: info\0', subscriberPublicKey, ephemeralPublicKey);
+  const info = createInfo('WebPush: info\0', new Uint8Array(subscriberPublicKey), new Uint8Array(ephemeralPublicKey));
   const prkBits = await crypto.subtle.deriveBits(
     { name: 'HKDF', salt: authSecret, info, hash: 'SHA-256' },
     sharedKey,
@@ -283,11 +283,15 @@ function base64UrlEncode(input: string | Uint8Array): string {
 }
 
 /**
- * Base64 URL decode
+ * Base64 URL decode - returns ArrayBuffer for crypto API compatibility
  */
-function base64UrlDecode(input: string): Uint8Array {
+function base64UrlDecode(input: string): ArrayBuffer {
   const base64 = input.replace(/-/g, '+').replace(/_/g, '/');
   const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
   const binary = atob(padded);
-  return Uint8Array.from(binary, (c) => c.charCodeAt(0));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer as ArrayBuffer;
 }
