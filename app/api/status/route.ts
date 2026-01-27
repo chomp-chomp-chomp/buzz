@@ -75,10 +75,20 @@ export async function GET(request: NextRequest) {
     }
 
     // Get the pair for last_chomp_at
-    const pair = await db
-      .prepare('SELECT * FROM pairs WHERE id = ?')
-      .bind(member.pair_id)
-      .first<Pair>();
+    let pair: Pair | null = null;
+    try {
+      pair = await db
+        .prepare('SELECT * FROM pairs WHERE id = ?')
+        .bind(member.pair_id)
+        .first<Pair>();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('no such column: last_chomp_at')) {
+        console.warn('Pairs.last_chomp_at missing; falling back to member data.');
+      } else {
+        throw error;
+      }
+    }
 
     // Calculate oven state for local user
     let state: 'cooling' | 'oven' = 'cooling';
@@ -94,7 +104,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get relative time for last chomp (from pair, not individual member)
-    const lastChompRelative = getRelativeTime(pair?.last_chomp_at ?? null);
+    const lastChompRelative = getRelativeTime(pair?.last_chomp_at ?? member.last_chomp_at ?? null);
 
     return NextResponse.json<StatusResponse>({
       state,
