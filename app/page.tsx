@@ -18,8 +18,11 @@ export default function HomePage() {
   const [deviceId, setDeviceId] = useState<string>("");
 
   // Check if running in standalone mode (installed PWA)
+  // Add ?dev=1 to URL to bypass for testing
   const isStandalone = useCallback(() => {
     if (typeof window === "undefined") return false;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("dev") === "1") return true;
     return (
       window.matchMedia("(display-mode: standalone)").matches ||
       (window.navigator as any).standalone === true
