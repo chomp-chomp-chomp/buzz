@@ -143,6 +143,16 @@ export default function HomePage() {
       if (!subscription) {
         const permission = await Notification.requestPermission();
         if (permission !== "granted") return;
+
+        const keyRes = await fetch("/api/vapid");
+        const keyData = await keyRes.json().catch(() => null);
+        const publicKey = keyData?.publicKey;
+        if (!keyRes.ok || !publicKey) return;
+
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey),
+        });
       }
 
       if (subscription) {
@@ -419,6 +429,19 @@ function formatCode(code: string): string {
   const clean = code.replace(/-/g, "").toUpperCase();
   if (clean.length <= 4) return clean;
   return `${clean.slice(0, 4)}-${clean.slice(4, 8)}`;
+}
+
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; i += 1) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+
+  return outputArray;
 }
 
 const styles: Record<string, React.CSSProperties> = {
