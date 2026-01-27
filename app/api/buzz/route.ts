@@ -82,10 +82,23 @@ export async function POST(request: NextRequest) {
     }
 
     // Update sender's last chomp time and pair's last chomp time
-    await db.batch([
-      db.prepare('UPDATE members SET last_chomp_at = ? WHERE id = ?').bind(now, sender.id),
-      db.prepare('UPDATE pairs SET last_chomp_at = ? WHERE id = ?').bind(now, sender.pair_id),
-    ]);
+    try {
+      await db.batch([
+        db.prepare('UPDATE members SET last_chomp_at = ? WHERE id = ?').bind(now, sender.id),
+        db.prepare('UPDATE pairs SET last_chomp_at = ? WHERE id = ?').bind(now, sender.pair_id),
+      ]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('no such column: last_chomp_at')) {
+        console.warn('Pairs.last_chomp_at missing; update skipped until migration runs.');
+        await db
+          .prepare('UPDATE members SET last_chomp_at = ? WHERE id = ?')
+          .bind(now, sender.id)
+          .run();
+      } else {
+        throw error;
+      }
+    }
 
     // Send push notification to partner (title: "Chomp", empty body)
     if (partner.push_endpoint && env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY) {
