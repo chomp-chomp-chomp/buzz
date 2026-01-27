@@ -18,8 +18,11 @@ export default function HomePage() {
   const [deviceId, setDeviceId] = useState<string>("");
 
   // Check if running in standalone mode (installed PWA)
+  // Add ?dev=1 to URL to bypass for testing
   const isStandalone = useCallback(() => {
     if (typeof window === "undefined") return false;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("dev") === "1") return true;
     return (
       window.matchMedia("(display-mode: standalone)").matches ||
       (window.navigator as any).standalone === true
@@ -42,8 +45,8 @@ export default function HomePage() {
   const fetchStatus = useCallback(async () => {
     try {
       const res = await fetch("/api/status");
-      const data = await res.json();
-      if (data.ovenRemainingSeconds > 0) {
+      const data: { ovenRemainingSeconds?: number; lastChompRelative?: string } = await res.json();
+      if (data.ovenRemainingSeconds && data.ovenRemainingSeconds > 0) {
         setOvenRemaining(data.ovenRemainingSeconds);
       }
       setLastChompRelative(data.lastChompRelative || "never");
@@ -73,7 +76,7 @@ export default function HomePage() {
       // Check pairing status
       try {
         const res = await fetch("/api/me");
-        const data = await res.json();
+        const data: { paired?: boolean; hasPartner?: boolean } = await res.json();
 
         if (data.paired && data.hasPartner) {
           setAppState("ready");
@@ -144,14 +147,29 @@ export default function HomePage() {
         const permission = await Notification.requestPermission();
         if (permission !== "granted") return;
 
-        const keyRes = await fetch("/api/vapid");
-        const keyData = await keyRes.json().catch(() => null);
-        const publicKey = keyData?.publicKey;
-        if (!keyRes.ok || !publicKey) return;
+        // Get VAPID public key from server
+        const vapidRes = await fetch("/api/vapid-key");
+        const vapidData = await vapidRes.json() as { publicKey?: string };
+        if (!vapidData.publicKey) return;
 
+        // Convert base64 to Uint8Array
+        const urlBase64ToUint8Array = (base64String: string) => {
+          const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+          const base64 = (base64String + padding)
+            .replace(/-/g, "+")
+            .replace(/_/g, "/");
+          const rawData = window.atob(base64);
+          const outputArray = new Uint8Array(rawData.length);
+          for (let i = 0; i < rawData.length; ++i) {
+            outputArray[i] = rawData.charCodeAt(i);
+          }
+          return outputArray;
+        };
+
+        // Create subscription
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(publicKey),
+          applicationServerKey: urlBase64ToUint8Array(vapidData.publicKey),
         });
       }
 
@@ -178,7 +196,7 @@ export default function HomePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code, deviceId }),
       });
-      const data = await res.json();
+      const data: { success?: boolean; paired?: boolean; waiting?: boolean } = await res.json();
 
       if (data.success) {
         if (data.paired) {
@@ -200,7 +218,7 @@ export default function HomePage() {
   async function handleGenerateCode() {
     try {
       const res = await fetch("/api/pair");
-      const data = await res.json();
+      const data: { code?: string } = await res.json();
       if (data.code) {
         handlePair(data.code);
       }
@@ -218,14 +236,14 @@ export default function HomePage() {
       const res = await fetch("/api/buzz", { method: "POST" });
 
       if (res.status === 429) {
-        const data = await res.json().catch(() => null);
+        const data = await res.json().catch(() => null) as { remainingSeconds?: number } | null;
         const remaining = Number(data?.remainingSeconds ?? 0);
         setOvenRemaining(Math.max(0, remaining));
         return;
       }
 
       if (res.ok) {
-        const data = await res.json().catch(() => null);
+        const data = await res.json().catch(() => null) as { ovenSeconds?: number } | null;
         const oven = Number(data?.ovenSeconds ?? OVEN_SECONDS);
         setOvenRemaining(oven);
         setLastChompRelative("just now");
@@ -242,7 +260,7 @@ export default function HomePage() {
     const interval = setInterval(async () => {
       try {
         const res = await fetch("/api/me");
-        const data = await res.json();
+        const data: { paired?: boolean; hasPartner?: boolean } = await res.json();
         if (data.paired && data.hasPartner) {
           setAppState("ready");
           await fetchStatus();

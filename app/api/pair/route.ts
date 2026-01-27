@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getRequestContext } from '@cloudflare/next-on-pages';
 import type { Env, Pair, Member, PairRequest, PairResponse } from '@/lib/types';
 import { sha256, generateId, generatePairCode } from '@/lib/crypto';
 
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest) {
     const codeHash = await sha256(normalizedCode);
 
     // Get Cloudflare bindings
-    const env: Env = (request as any).cf?.env || process.env;
+    const { env } = getRequestContext() as unknown as { env: Env };
     const db = env.DB;
 
     if (!db) {

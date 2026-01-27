@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getRequestContext } from '@cloudflare/next-on-pages';
 import type { Env, Member, MeResponse } from '@/lib/types';
 
 const OVEN_SECONDS = 108;
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get Cloudflare bindings
-    const env: Env = (request as any).cf?.env || process.env;
+    const { env } = getRequestContext() as unknown as { env: Env };
     const db = env.DB;
 
     if (!db) {
