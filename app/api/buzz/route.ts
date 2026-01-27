@@ -8,7 +8,18 @@ const OVEN_SECONDS = 108;
 
 export const runtime = 'edge';
 
+function isDebugRequest(request: NextRequest): boolean {
+  const header = request.headers.get('x-debug');
+  if (header === '1' || header === 'true') {
+    return true;
+  }
+  const devParam = request.nextUrl.searchParams.get('dev');
+  return devParam === '1';
+}
+
 export async function POST(request: NextRequest) {
+  const debug = isDebugRequest(request);
+
   try {
     // Get device ID from cookie
     const deviceId = request.cookies.get('deviceId')?.value;
@@ -78,13 +89,17 @@ export async function POST(request: NextRequest) {
 
     // Send push notification to partner (title: "Chomp", empty body)
     if (partner.push_endpoint && env.VAPID_PUBLIC_KEY && env.VAPID_PRIVATE_KEY) {
-      await sendPushNotification(
-        partner,
-        { title: 'Chomp', body: '' },
-        env.VAPID_PUBLIC_KEY,
-        env.VAPID_PRIVATE_KEY,
-        env.VAPID_SUBJECT || 'mailto:hello@cooling.app'
-      );
+      try {
+        await sendPushNotification(
+          partner,
+          { title: 'Chomp', body: '' },
+          env.VAPID_PUBLIC_KEY,
+          env.VAPID_PRIVATE_KEY,
+          env.VAPID_SUBJECT || 'mailto:hello@cooling.app'
+        );
+      } catch (error) {
+        console.error('Push send error:', error);
+      }
     }
 
     return NextResponse.json<ChompResponse>({
@@ -93,8 +108,9 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Chomp error:', error);
+    const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json<ChompResponse>(
-      { success: false, error: 'Internal error' },
+      { success: false, error: debug ? `Internal error: ${message}` : 'Internal error' },
       { status: 500 }
     );
   }

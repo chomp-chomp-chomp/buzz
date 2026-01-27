@@ -16,6 +16,19 @@ export default function HomePage() {
   const [pairCode, setPairCode] = useState("");
   const [inputCode, setInputCode] = useState("");
   const [deviceId, setDeviceId] = useState<string>("");
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
+  const [devMode, setDevMode] = useState(false);
+
+  const logDebug = useCallback((message: string) => {
+    const timestamp = new Date().toLocaleTimeString();
+    setDebugLogs((prev) => [`[${timestamp}] ${message}`, ...prev].slice(0, 80));
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    setDevMode(params.get("dev") === "1");
+  }, []);
 
   // Check if running in standalone mode (installed PWA)
   // Add ?dev=1 to URL to bypass for testing
@@ -45,15 +58,24 @@ export default function HomePage() {
   const fetchStatus = useCallback(async () => {
     try {
       const res = await fetch("/api/status");
+      if (!res.ok) {
+        const body = await res.text();
+        logDebug(`status failed (${res.status}) ${body}`);
+        return;
+      }
       const data: { ovenRemainingSeconds?: number; lastChompRelative?: string } = await res.json();
       if (data.ovenRemainingSeconds && data.ovenRemainingSeconds > 0) {
         setOvenRemaining(data.ovenRemainingSeconds);
       }
       setLastChompRelative(data.lastChompRelative || "never");
+      logDebug(
+        `status ok (remaining=${data.ovenRemainingSeconds ?? 0}, last=${data.lastChompRelative ?? "never"})`
+      );
     } catch (e) {
+      logDebug("status failed (network)");
       // Ignore
     }
-  }, []);
+  }, [logDebug]);
 
   // Initialize app state
   useEffect(() => {
@@ -76,7 +98,14 @@ export default function HomePage() {
       // Check pairing status
       try {
         const res = await fetch("/api/me");
+        if (!res.ok) {
+          const body = await res.text();
+          logDebug(`me failed (${res.status}) ${body}`);
+          setAppState("pair");
+          return;
+        }
         const data: { paired?: boolean; hasPartner?: boolean } = await res.json();
+        logDebug(`me ok (paired=${data.paired ?? false}, hasPartner=${data.hasPartner ?? false})`);
 
         if (data.paired && data.hasPartner) {
           setAppState("ready");
@@ -88,10 +117,12 @@ export default function HomePage() {
           setAppState("waiting");
           const stored = localStorage.getItem("pairCode");
           if (stored) setPairCode(stored);
+          await subscribeToPush();
         } else {
           setAppState("pair");
         }
       } catch (e) {
+        logDebug("init failed; defaulting to pair (network)");
         setAppState("pair");
       }
     }
@@ -134,6 +165,11 @@ export default function HomePage() {
     return () => clearInterval(timer);
   }, [ovenRemaining]);
 
+  useEffect(() => {
+    if (!deviceId) return;
+    logDebug(`device ready (${deviceId.slice(0, 8)}...)`);
+  }, [deviceId, logDebug]);
+
   // Subscribe to push notifications
   async function subscribeToPush() {
     if (!("PushManager" in window)) return;
@@ -145,6 +181,7 @@ export default function HomePage() {
 
       if (!subscription) {
         const permission = await Notification.requestPermission();
+        logDebug(`notification permission: ${permission}`);
         if (permission !== "granted") return;
 
         // Get VAPID public key from server
@@ -174,7 +211,7 @@ export default function HomePage() {
       }
 
       if (subscription) {
-        await fetch("/api/subscribe", {
+        const res = await fetch("/api/subscribe", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -182,9 +219,16 @@ export default function HomePage() {
             subscription: subscription.toJSON(),
           }),
         });
+        if (!res.ok) {
+          const body = await res.text();
+          logDebug(`push subscribe failed (${res.status}) ${body}`);
+          return;
+        }
+        logDebug("push subscribed");
       }
     } catch (e) {
       console.error("Push subscription failed:", e);
+      logDebug("push subscribe failed (network)");
     }
   }
 
@@ -196,6 +240,11 @@ export default function HomePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code, deviceId }),
       });
+      if (!res.ok) {
+        const body = await res.text();
+        logDebug(`pair failed (${res.status}) ${body}`);
+        return;
+      }
       const data: { success?: boolean; paired?: boolean; waiting?: boolean } = await res.json();
 
       if (data.success) {
@@ -207,10 +256,13 @@ export default function HomePage() {
           setAppState("waiting");
           localStorage.setItem("pairCode", code);
           setPairCode(code);
+          await subscribeToPush();
         }
+        logDebug(`pair ok (paired=${data.paired ?? false}, waiting=${data.waiting ?? false})`);
       }
     } catch (e) {
       console.error("Pairing failed:", e);
+      logDebug("pair failed (network)");
     }
   }
 
@@ -218,12 +270,19 @@ export default function HomePage() {
   async function handleGenerateCode() {
     try {
       const res = await fetch("/api/pair");
+      if (!res.ok) {
+        const body = await res.text();
+        logDebug(`pair code generation failed (${res.status}) ${body}`);
+        return;
+      }
       const data: { code?: string } = await res.json();
       if (data.code) {
+        logDebug(`pair code generated (${data.code})`);
         handlePair(data.code);
       }
     } catch (e) {
       console.error("Code generation failed:", e);
+      logDebug("pair code generation failed (network)");
     }
   }
 
@@ -233,12 +292,16 @@ export default function HomePage() {
     setIsSending(true);
 
     try {
-      const res = await fetch("/api/buzz", { method: "POST" });
+      const res = await fetch("/api/buzz", {
+        method: "POST",
+        headers: devMode ? { "x-debug": "1" } : undefined,
+      });
 
       if (res.status === 429) {
         const data = await res.json().catch(() => null) as { remainingSeconds?: number } | null;
         const remaining = Number(data?.remainingSeconds ?? 0);
         setOvenRemaining(Math.max(0, remaining));
+        logDebug(`chomp rate-limited (${remaining}s)`);
         return;
       }
 
@@ -247,6 +310,10 @@ export default function HomePage() {
         const oven = Number(data?.ovenSeconds ?? OVEN_SECONDS);
         setOvenRemaining(oven);
         setLastChompRelative("just now");
+        logDebug(`chomp ok (oven=${oven}s)`);
+      } else {
+        const body = await res.text();
+        logDebug(`chomp failed (${res.status}) ${body}`);
       }
     } finally {
       setTimeout(() => setIsSending(false), 120);
@@ -265,8 +332,10 @@ export default function HomePage() {
           setAppState("ready");
           await fetchStatus();
           await subscribeToPush();
+          logDebug("partner joined");
         }
       } catch (e) {
+        logDebug("poll partner failed");
         // Ignore
       }
     }, 3000);
@@ -275,6 +344,14 @@ export default function HomePage() {
   }, [appState, deviceId, fetchStatus]);
 
   const inOven = ovenRemaining > 0;
+  const debugPanel = devMode ? (
+    <section style={styles.debugPanel}>
+      <div style={styles.debugTitle}>Debug log</div>
+      <div style={styles.debugBody}>
+        {debugLogs.length === 0 ? "No logs yet." : debugLogs.join("\n")}
+      </div>
+    </section>
+  ) : null;
 
   // Render based on state
   if (appState === "loading") {
@@ -283,6 +360,7 @@ export default function HomePage() {
         <div style={styles.centerWrap}>
           <div style={styles.status}>loading</div>
         </div>
+        {debugPanel}
       </main>
     );
   }
@@ -311,6 +389,7 @@ export default function HomePage() {
             About
           </Link>
         </footer>
+        {debugPanel}
       </main>
     );
   }
@@ -369,6 +448,7 @@ export default function HomePage() {
             About
           </Link>
         </footer>
+        {debugPanel}
       </main>
     );
   }
@@ -397,6 +477,7 @@ export default function HomePage() {
             About
           </Link>
         </footer>
+        {debugPanel}
       </main>
     );
   }
@@ -439,6 +520,7 @@ export default function HomePage() {
           About
         </Link>
       </footer>
+      {debugPanel}
     </main>
   );
 }
@@ -517,6 +599,22 @@ const styles: Record<string, React.CSSProperties> = {
     opacity: 0.7,
     textDecoration: "none",
     color: "inherit",
+  },
+  debugPanel: {
+    borderTop: "1px solid rgba(0, 0, 0, 0.1)",
+    padding: "12px 18px 20px",
+    fontSize: 12,
+    background: "#fafafa",
+    color: "#222",
+  },
+  debugTitle: {
+    fontWeight: 600,
+    marginBottom: 6,
+  },
+  debugBody: {
+    whiteSpace: "pre-wrap",
+    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+    opacity: 0.8,
   },
   installHint: {
     fontSize: 12,
