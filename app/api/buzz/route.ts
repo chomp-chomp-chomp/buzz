@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getRequestContext } from '@cloudflare/next-on-pages';
 import type { Env, Member, ChompResponse } from '@/lib/types';
 import { sendPushNotification } from '@/lib/push';
 
@@ -19,7 +20,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get Cloudflare bindings
-    const env: Env = (request as any).cf?.env || process.env;
+    const { env } = getRequestContext() as unknown as { env: Env };
     const db = env.DB;
 
     if (!db) {
