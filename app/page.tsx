@@ -58,6 +58,11 @@ export default function HomePage() {
   const fetchStatus = useCallback(async () => {
     try {
       const res = await fetch("/api/status");
+      if (!res.ok) {
+        const body = await res.text();
+        logDebug(`status failed (${res.status}) ${body}`);
+        return;
+      }
       const data: { ovenRemainingSeconds?: number; lastChompRelative?: string } = await res.json();
       if (data.ovenRemainingSeconds && data.ovenRemainingSeconds > 0) {
         setOvenRemaining(data.ovenRemainingSeconds);
@@ -67,7 +72,7 @@ export default function HomePage() {
         `status ok (remaining=${data.ovenRemainingSeconds ?? 0}, last=${data.lastChompRelative ?? "never"})`
       );
     } catch (e) {
-      logDebug("status failed");
+      logDebug("status failed (network)");
       // Ignore
     }
   }, [logDebug]);
@@ -93,7 +98,14 @@ export default function HomePage() {
       // Check pairing status
       try {
         const res = await fetch("/api/me");
+        if (!res.ok) {
+          const body = await res.text();
+          logDebug(`me failed (${res.status}) ${body}`);
+          setAppState("pair");
+          return;
+        }
         const data: { paired?: boolean; hasPartner?: boolean } = await res.json();
+        logDebug(`me ok (paired=${data.paired ?? false}, hasPartner=${data.hasPartner ?? false})`);
 
         if (data.paired && data.hasPartner) {
           setAppState("ready");
@@ -110,7 +122,7 @@ export default function HomePage() {
           setAppState("pair");
         }
       } catch (e) {
-        logDebug("init failed; defaulting to pair");
+        logDebug("init failed; defaulting to pair (network)");
         setAppState("pair");
       }
     }
@@ -153,6 +165,11 @@ export default function HomePage() {
     return () => clearInterval(timer);
   }, [ovenRemaining]);
 
+  useEffect(() => {
+    if (!deviceId) return;
+    logDebug(`device ready (${deviceId.slice(0, 8)}...)`);
+  }, [deviceId, logDebug]);
+
   // Subscribe to push notifications
   async function subscribeToPush() {
     if (!("PushManager" in window)) return;
@@ -194,7 +211,7 @@ export default function HomePage() {
       }
 
       if (subscription) {
-        await fetch("/api/subscribe", {
+        const res = await fetch("/api/subscribe", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -202,11 +219,16 @@ export default function HomePage() {
             subscription: subscription.toJSON(),
           }),
         });
+        if (!res.ok) {
+          const body = await res.text();
+          logDebug(`push subscribe failed (${res.status}) ${body}`);
+          return;
+        }
         logDebug("push subscribed");
       }
     } catch (e) {
       console.error("Push subscription failed:", e);
-      logDebug("push subscribe failed");
+      logDebug("push subscribe failed (network)");
     }
   }
 
@@ -218,6 +240,11 @@ export default function HomePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code, deviceId }),
       });
+      if (!res.ok) {
+        const body = await res.text();
+        logDebug(`pair failed (${res.status}) ${body}`);
+        return;
+      }
       const data: { success?: boolean; paired?: boolean; waiting?: boolean } = await res.json();
 
       if (data.success) {
@@ -235,7 +262,7 @@ export default function HomePage() {
       }
     } catch (e) {
       console.error("Pairing failed:", e);
-      logDebug("pair failed");
+      logDebug("pair failed (network)");
     }
   }
 
@@ -243,6 +270,11 @@ export default function HomePage() {
   async function handleGenerateCode() {
     try {
       const res = await fetch("/api/pair");
+      if (!res.ok) {
+        const body = await res.text();
+        logDebug(`pair code generation failed (${res.status}) ${body}`);
+        return;
+      }
       const data: { code?: string } = await res.json();
       if (data.code) {
         logDebug(`pair code generated (${data.code})`);
@@ -250,7 +282,7 @@ export default function HomePage() {
       }
     } catch (e) {
       console.error("Code generation failed:", e);
-      logDebug("pair code generation failed");
+      logDebug("pair code generation failed (network)");
     }
   }
 
@@ -277,7 +309,8 @@ export default function HomePage() {
         setLastChompRelative("just now");
         logDebug(`chomp ok (oven=${oven}s)`);
       } else {
-        logDebug(`chomp failed (${res.status})`);
+        const body = await res.text();
+        logDebug(`chomp failed (${res.status}) ${body}`);
       }
     } finally {
       setTimeout(() => setIsSending(false), 120);
