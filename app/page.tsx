@@ -292,7 +292,10 @@ export default function HomePage() {
     setIsSending(true);
 
     try {
-      const res = await fetch("/api/buzz", { method: "POST" });
+      const res = await fetch("/api/buzz", {
+        method: "POST",
+        headers: devMode ? { "x-debug": "1" } : undefined,
+      });
 
       if (res.status === 429) {
         const data = await res.json().catch(() => null) as { remainingSeconds?: number } | null;
