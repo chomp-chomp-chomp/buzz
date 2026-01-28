@@ -10,7 +10,11 @@ const OVEN_SECONDS = 108;
 
 export default function HomePage() {
   const [appState, setAppState] = useState<AppState>("loading");
-  const [ovenRemaining, setOvenRemaining] = useState<number>(0);
+  const [sentRemaining, setSentRemaining] = useState<number>(0);
+  const [receivedRemaining, setReceivedRemaining] = useState<number>(0);
+  const [lastSentAt, setLastSentAt] = useState<number | null>(null);
+  const [lastReceivedAt, setLastReceivedAt] = useState<number | null>(null);
+  const [serverOffsetMs, setServerOffsetMs] = useState(0);
   const [lastChompRelative, setLastChompRelative] = useState<string>("never");
   const [isSending, setIsSending] = useState(false);
   const [pairCode, setPairCode] = useState("");
@@ -63,13 +67,38 @@ export default function HomePage() {
         logDebug(`status failed (${res.status}) ${body}`);
         return;
       }
-      const data: { ovenRemainingSeconds?: number; lastChompRelative?: string } = await res.json();
-      if (data.ovenRemainingSeconds && data.ovenRemainingSeconds > 0) {
-        setOvenRemaining(data.ovenRemainingSeconds);
+      const data: {
+        ovenRemainingSeconds?: number;
+        lastChompRelative?: string;
+        serverNow?: number;
+        lastSentAt?: number | null;
+        lastReceivedAt?: number | null;
+      } = await res.json();
+      const serverNow = data.serverNow ?? Math.floor(Date.now() / 1000);
+      const offsetMs = serverNow * 1000 - Date.now();
+      const alignedNow = Math.floor((Date.now() + offsetMs) / 1000);
+      setServerOffsetMs(offsetMs);
+      setLastSentAt(data.lastSentAt ?? null);
+      setLastReceivedAt(data.lastReceivedAt ?? null);
+      const sentRemainingSeconds = data.lastSentAt
+        ? Math.max(0, OVEN_SECONDS - (alignedNow - data.lastSentAt))
+        : 0;
+      const receivedRemainingSeconds = data.lastReceivedAt
+        ? Math.max(0, OVEN_SECONDS - (alignedNow - data.lastReceivedAt))
+        : 0;
+      if (sentRemainingSeconds > 0) {
+        setSentRemaining(sentRemainingSeconds);
+      } else {
+        setSentRemaining(0);
+      }
+      if (receivedRemainingSeconds > 0) {
+        setReceivedRemaining(receivedRemainingSeconds);
+      } else {
+        setReceivedRemaining(0);
       }
       setLastChompRelative(data.lastChompRelative || "never");
       logDebug(
-        `status ok (remaining=${data.ovenRemainingSeconds ?? 0}, last=${data.lastChompRelative ?? "never"})`
+        `status ok (sentRemaining=${sentRemainingSeconds}, receivedRemaining=${receivedRemainingSeconds}, last=${data.lastChompRelative ?? "never"})`
       );
     } catch (e) {
       logDebug("status failed (network)");
@@ -150,20 +179,27 @@ export default function HomePage() {
 
   // Oven timer countdown
   useEffect(() => {
-    if (ovenRemaining <= 0) return;
+    if (!lastSentAt && !lastReceivedAt) return;
 
     const timer = setInterval(() => {
-      setOvenRemaining((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          return 0;
-        }
-        return prev - 1;
-      });
+      const alignedNow = Math.floor((Date.now() + serverOffsetMs) / 1000);
+      const nextSent = lastSentAt
+        ? Math.max(0, OVEN_SECONDS - (alignedNow - lastSentAt))
+        : 0;
+      const nextReceived = lastReceivedAt
+        ? Math.max(0, OVEN_SECONDS - (alignedNow - lastReceivedAt))
+        : 0;
+      setSentRemaining(nextSent);
+      setReceivedRemaining(nextReceived);
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [ovenRemaining]);
+  }, [lastSentAt, lastReceivedAt, serverOffsetMs]);
+
+  useEffect(() => {
+    if (!deviceId) return;
+    logDebug(`device ready (${deviceId.slice(0, 8)}...)`);
+  }, [deviceId, logDebug]);
 
   useEffect(() => {
     if (!deviceId) return;
@@ -288,7 +324,7 @@ export default function HomePage() {
 
   // Handle chomp
   async function handleChomp() {
-    if (isSending || ovenRemaining > 0) return;
+    if (isSending || sentRemaining > 0) return;
     setIsSending(true);
 
     try {
@@ -300,7 +336,7 @@ export default function HomePage() {
       if (res.status === 429) {
         const data = await res.json().catch(() => null) as { remainingSeconds?: number } | null;
         const remaining = Number(data?.remainingSeconds ?? 0);
-        setOvenRemaining(Math.max(0, remaining));
+        setSentRemaining(Math.max(0, remaining));
         logDebug(`chomp rate-limited (${remaining}s)`);
         return;
       }
@@ -308,8 +344,9 @@ export default function HomePage() {
       if (res.ok) {
         const data = await res.json().catch(() => null) as { ovenSeconds?: number } | null;
         const oven = Number(data?.ovenSeconds ?? OVEN_SECONDS);
-        setOvenRemaining(oven);
-        setLastChompRelative("just now");
+        setSentRemaining(oven);
+        const alignedNow = Math.floor((Date.now() + serverOffsetMs) / 1000);
+        setLastSentAt(alignedNow);
         logDebug(`chomp ok (oven=${oven}s)`);
       } else {
         const body = await res.text();
@@ -343,7 +380,7 @@ export default function HomePage() {
     return () => clearInterval(interval);
   }, [appState, deviceId, fetchStatus]);
 
-  const inOven = ovenRemaining > 0;
+  const inOven = sentRemaining > 0;
   const debugPanel = devMode ? (
     <section style={styles.debugPanel}>
       <div style={styles.debugTitle}>Debug log</div>
@@ -498,20 +535,30 @@ export default function HomePage() {
           }}
         >
           <Image
-            src="/heart-cookie.png"
-            alt="Heart cookie"
+            src={inOven ? "/heart-cookie.png" : "/round-cookie.svg"}
+            alt="Cookie"
             width={240}
             height={240}
             priority
             style={styles.heartImage as React.CSSProperties}
           />
+          {receivedRemaining > 0 ? (
+            <Image
+              src="/heart-cookie.png"
+              alt="Received chomp"
+              width={48}
+              height={48}
+              priority
+              style={styles.receivedBadge as React.CSSProperties}
+            />
+          ) : null}
         </button>
 
         <div style={styles.statusWrap}>
           <div style={styles.status}>
-            {inOven ? `in the oven • ${ovenRemaining} seconds` : "Cooling"}
+            {inOven ? `in the oven • ${sentRemaining} seconds` : "Cooling"}
           </div>
-          <div style={styles.lastChomp}>last chomp: {lastChompRelative}</div>
+          <div style={styles.lastChomp}>last chomp received: {lastChompRelative}</div>
         </div>
       </div>
 
@@ -574,6 +621,14 @@ const styles: Record<string, React.CSSProperties> = {
   heartImage: {
     display: "block",
     userSelect: "none",
+  },
+  receivedBadge: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 48,
+    height: 48,
+    pointerEvents: "none",
   },
   statusWrap: {
     display: "flex",

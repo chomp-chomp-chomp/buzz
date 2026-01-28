@@ -37,6 +37,7 @@ function getRelativeTime(timestamp: number | null): string {
 
 export async function GET(request: NextRequest) {
   try {
+    const now = Math.floor(Date.now() / 1000);
     const deviceId = request.cookies.get('deviceId')?.value;
 
     if (!deviceId) {
@@ -44,6 +45,9 @@ export async function GET(request: NextRequest) {
         state: 'cooling',
         ovenRemainingSeconds: 0,
         lastChompRelative: 'never',
+        serverNow: now,
+        lastSentAt: null,
+        lastReceivedAt: null,
       });
     }
 
@@ -57,20 +61,48 @@ export async function GET(request: NextRequest) {
         state: 'cooling',
         ovenRemainingSeconds: 0,
         lastChompRelative: 'just now',
+        serverNow: now,
+        lastSentAt: null,
+        lastReceivedAt: null,
       });
     }
 
     // Get the member
-    const member = await db
-      .prepare('SELECT * FROM members WHERE device_id = ?')
-      .bind(deviceId)
-      .first<Member>();
+    let member: Member | null = null;
+    try {
+      member = await db
+        .prepare('SELECT * FROM members WHERE device_id = ?')
+        .bind(deviceId)
+        .first<Member>();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (
+        message.includes('no such column: last_chomp_at') ||
+        message.includes('no such column: last_received_at')
+      ) {
+        console.warn('Members chomp columns missing; retrying without those columns.');
+        const fallback = await db
+          .prepare(
+            'SELECT id, pair_id, device_id, push_endpoint, push_p256dh, push_auth, created_at FROM members WHERE device_id = ?'
+          )
+          .bind(deviceId)
+          .first<Member>();
+        member = fallback
+          ? { ...fallback, last_chomp_at: null, last_received_at: null }
+          : null;
+      } else {
+        throw error;
+      }
+    }
 
     if (!member) {
       return NextResponse.json<StatusResponse>({
         state: 'cooling',
         ovenRemainingSeconds: 0,
         lastChompRelative: 'never',
+        serverNow: now,
+        lastSentAt: null,
+        lastReceivedAt: null,
       });
     }
 
@@ -95,7 +127,6 @@ export async function GET(request: NextRequest) {
     let ovenRemainingSeconds = 0;
 
     if (member.last_chomp_at) {
-      const now = Math.floor(Date.now() / 1000);
       const elapsed = now - member.last_chomp_at;
       if (elapsed < OVEN_SECONDS) {
         state = 'oven';
@@ -104,12 +135,17 @@ export async function GET(request: NextRequest) {
     }
 
     // Get relative time for last chomp (from pair, not individual member)
-    const lastChompRelative = getRelativeTime(pair?.last_chomp_at ?? member.last_chomp_at ?? null);
+    const lastSentAt = member.last_chomp_at ?? null;
+    const lastReceivedAt = member.last_received_at ?? pair?.last_chomp_at ?? null;
+    const lastChompRelative = getRelativeTime(lastReceivedAt ?? lastSentAt ?? null);
 
     return NextResponse.json<StatusResponse>({
       state,
       ovenRemainingSeconds,
       lastChompRelative,
+      serverNow: now,
+      lastSentAt,
+      lastReceivedAt,
     });
   } catch (error) {
     console.error('Status error:', error);
@@ -117,6 +153,9 @@ export async function GET(request: NextRequest) {
       state: 'cooling',
       ovenRemainingSeconds: 0,
       lastChompRelative: 'never',
+      serverNow: Math.floor(Date.now() / 1000),
+      lastSentAt: null,
+      lastReceivedAt: null,
     });
   }
 }

@@ -81,20 +81,60 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Update sender's last chomp time and pair's last chomp time
+    // Update sender's last chomp time, partner received time, and pair's last chomp time
     try {
       await db.batch([
         db.prepare('UPDATE members SET last_chomp_at = ? WHERE id = ?').bind(now, sender.id),
+        db
+          .prepare('UPDATE members SET last_received_at = ? WHERE id = ?')
+          .bind(now, partner.id),
         db.prepare('UPDATE pairs SET last_chomp_at = ? WHERE id = ?').bind(now, sender.pair_id),
       ]);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (message.includes('no such column: last_chomp_at')) {
-        console.warn('Pairs.last_chomp_at missing; update skipped until migration runs.');
-        await db
-          .prepare('UPDATE members SET last_chomp_at = ? WHERE id = ?')
-          .bind(now, sender.id)
-          .run();
+      if (message.includes('no such column: last_chomp_at') || message.includes('no such column: last_received_at')) {
+        console.warn('last_chomp_at missing; retrying updates where possible.');
+        await Promise.all([
+          db
+            .prepare('UPDATE members SET last_chomp_at = ? WHERE id = ?')
+            .bind(now, sender.id)
+            .run()
+            .catch((memberError) => {
+              const memberMessage =
+                memberError instanceof Error ? memberError.message : String(memberError);
+              if (memberMessage.includes('no such column: last_chomp_at')) {
+                console.warn('Members.last_chomp_at missing; update skipped until migration runs.');
+                return;
+              }
+              throw memberError;
+            }),
+          db
+            .prepare('UPDATE members SET last_received_at = ? WHERE id = ?')
+            .bind(now, partner.id)
+            .run()
+            .catch((receivedError) => {
+              const receivedMessage =
+                receivedError instanceof Error ? receivedError.message : String(receivedError);
+              if (receivedMessage.includes('no such column: last_received_at')) {
+                console.warn('Members.last_received_at missing; update skipped until migration runs.');
+                return;
+              }
+              throw receivedError;
+            }),
+          db
+            .prepare('UPDATE pairs SET last_chomp_at = ? WHERE id = ?')
+            .bind(now, sender.pair_id)
+            .run()
+            .catch((pairError) => {
+              const pairMessage =
+                pairError instanceof Error ? pairError.message : String(pairError);
+              if (pairMessage.includes('no such column: last_chomp_at')) {
+                console.warn('Pairs.last_chomp_at missing; update skipped until migration runs.');
+                return;
+              }
+              throw pairError;
+            }),
+        ]);
       } else {
         throw error;
       }
