@@ -8,6 +8,11 @@ interface PushPayload {
   body: string;
 }
 
+type PushSendResult = {
+  ok: boolean;
+  status?: number;
+};
+
 // Helper to convert Uint8Array to ArrayBuffer (for strict TypeScript)
 function toArrayBuffer(arr: Uint8Array): ArrayBuffer {
   return arr.buffer.slice(arr.byteOffset, arr.byteOffset + arr.byteLength) as ArrayBuffer;
@@ -24,9 +29,27 @@ export async function sendPushNotification(
   vapidPrivateKey: string,
   vapidSubject: string
 ): Promise<boolean> {
+  const result = await sendPushNotificationWithResult(
+    member,
+    payload,
+    vapidPublicKey,
+    vapidPrivateKey,
+    vapidSubject
+  );
+
+  return result.ok;
+}
+
+export async function sendPushNotificationWithResult(
+  member: Member,
+  payload: PushPayload,
+  vapidPublicKey: string,
+  vapidPrivateKey: string,
+  vapidSubject: string
+): Promise<PushSendResult> {
   if (!member.push_endpoint || !member.push_p256dh || !member.push_auth) {
     console.log('Push: Missing push credentials for member');
-    return false;
+    return { ok: false };
   }
 
   try {
@@ -80,10 +103,10 @@ export async function sendPushNotification(
       console.error('Push failed:', response.status, text);
     }
 
-    return response.ok || response.status === 201;
+    return { ok: response.ok || response.status === 201, status: response.status };
   } catch (error) {
     console.error('Push notification failed:', error);
-    return false;
+    return { ok: false };
   }
 }
 
