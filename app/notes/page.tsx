@@ -215,7 +215,7 @@ export default function Notes() {
             ← Back
           </Link>
         </nav>
-        <h1 style={styles.h1}>Notes</h1>
+        <h1 style={styles.h1}>Documentation</h1>
 
         <div style={styles.accordion} role="list">
           {sections.map((s, idx) => {
