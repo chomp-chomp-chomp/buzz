@@ -5,13 +5,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ensurePushSubscription,
   getNotificationStatus,
+  resubscribePushNotifications,
   type NotificationStatus,
 } from "@/lib/push-client";
 
 type ActionState = "idle" | "working" | "success" | "error";
 
 export default function NotificationsPage() {
-  const [status, setStatus] = useState<NotificationStatus | null>(null);
+  const [notificationStatus, setNotificationStatus] = useState<NotificationStatus | null>(null);
   const [actionState, setActionState] = useState<ActionState>("idle");
   const [actionMessage, setActionMessage] = useState<string>("");
   const [testMessage, setTestMessage] = useState<string>("");
@@ -29,7 +30,7 @@ export default function NotificationsPage() {
 
   const refreshStatus = useCallback(async () => {
     const nextStatus = await getNotificationStatus();
-    setStatus(nextStatus);
+    setNotificationStatus(nextStatus);
   }, []);
 
   useEffect(() => {
@@ -42,36 +43,36 @@ export default function NotificationsPage() {
   }, []);
 
   const statusText = useMemo(() => {
-    if (!status) return "loading";
-    if (status.statusLabel === "Enabled") return "on";
-    if (status.statusLabel === "Denied") return "denied";
-    if (status.statusLabel === "Not installed") return "not installed";
+    if (!notificationStatus) return "loading";
+    if (notificationStatus.statusLabel === "Enabled") return "on";
+    if (notificationStatus.statusLabel === "Denied") return "denied";
+    if (notificationStatus.statusLabel === "Not installed") return "not installed";
     return "off";
-  }, [status]);
+  }, [notificationStatus]);
 
   const primaryLabel = useMemo(() => {
-    if (!status) return "Checking…";
-    if (status.permission === "default") return "Enable notifications";
-    if (status.permission === "granted") return "Fix notifications";
-    if (status.permission === "denied") return "How to enable on iPhone";
+    if (!notificationStatus) return "Checking…";
+    if (notificationStatus.permission === "default") return "Enable notifications";
+    if (notificationStatus.permission === "granted") return "Fix notifications";
+    if (notificationStatus.permission === "denied") return "How to enable on iPhone";
     return "Notifications unavailable";
-  }, [status]);
+  }, [notificationStatus]);
 
   const handlePrimary = useCallback(async () => {
-    if (!status) return;
+    if (!notificationStatus) return;
 
     setActionMessage("");
     setTestMessage("");
     setActionState("working");
 
-    if (status.permission === "denied") {
+    if (notificationStatus.permission === "denied") {
       setHelpOpen(true);
       setActionState("idle");
       return;
     }
 
-    if (status.permission === "default") {
-      if (isIos && !status.isInstalled) {
+    if (notificationStatus.permission === "default") {
+      if (isIos && !notificationStatus.isInstalled) {
         setActionMessage("Install to Home Screen to enable notifications on iPhone.");
         setActionState("idle");
         return;
@@ -105,29 +106,55 @@ export default function NotificationsPage() {
       return;
     }
 
-    if (status.permission === "granted") {
+    if (notificationStatus.permission === "granted") {
+      type PushTestResponse = {
+        ok: boolean;
+        status?: number;
+        reason?: string;
+        endpointHost?: string | null;
+        action?: string;
+      };
+
       try {
-        await ensurePushSubscription({ forceResubscribe: false });
-        setActionMessage("Notifications ready.");
-        setActionState("success");
-      } catch (error) {
-        try {
-          await ensurePushSubscription({ forceResubscribe: true });
+        const res = await fetch("/api/push/test", { method: "POST" });
+        const data = (await res.json().catch(() => null)) as PushTestResponse | null;
+        if (data?.ok) {
           setActionMessage("Notifications ready.");
           setActionState("success");
-        } catch (retryError) {
-          setActionMessage("Notifications are on, but subscription failed. Try Fix.");
-          setActionState("error");
-          console.error(error);
-          console.error(retryError);
+          await refreshStatus();
+          return;
         }
+
+        if (data?.action === "resubscribe") {
+          await resubscribePushNotifications();
+          setActionMessage("Notifications ready.");
+          setActionState("success");
+          await refreshStatus();
+          return;
+        }
+
+        if (data?.action === "check_vapid_keys") {
+          setActionMessage(
+            "Notifications are on, but could not send. Try Fix again or reinstall."
+          );
+          setActionState("error");
+          await refreshStatus();
+          return;
+        }
+
+        setActionMessage("Notifications are on, but could not send. Try Fix again.");
+        setActionState("error");
+      } catch (error) {
+        setActionMessage("Notifications are on, but could not send. Try Fix again.");
+        setActionState("error");
+        console.error(error);
       }
       await refreshStatus();
       return;
     }
 
     setActionState("idle");
-  }, [status, isIos, refreshStatus]);
+  }, [notificationStatus, isIos, refreshStatus]);
 
   const handleTest = useCallback(async () => {
     setTestMessage("");
@@ -135,15 +162,19 @@ export default function NotificationsPage() {
 
     try {
       const res = await fetch("/api/push/test", { method: "POST" });
-      if (res.ok) {
+      const data = (await res.json().catch(() => null)) as
+        | { ok: boolean; action?: string }
+        | null;
+      if (data?.ok) {
         setTestMessage("Test sent.");
         setActionState("success");
       } else {
-        const data = (await res.json().catch(() => null)) as
-          | { needsResubscribe?: boolean }
-          | null;
         setTestMessage(
-          data?.needsResubscribe ? "Failed. Tap Fix notifications." : "Failed."
+          data?.action === "resubscribe"
+            ? "Failed. Tap Fix notifications."
+            : data?.action === "check_vapid_keys"
+              ? "Notifications are on, but could not send."
+              : "Failed."
         );
         setActionState("error");
       }
@@ -155,7 +186,7 @@ export default function NotificationsPage() {
   }, []);
 
   const showTestButton =
-    status?.permission === "granted" && status.subscriptionExists;
+    notificationStatus?.permission === "granted" && notificationStatus.subscriptionExists;
 
   return (
     <main style={styles.page}>
@@ -172,13 +203,15 @@ export default function NotificationsPage() {
             <span style={styles.statusLabel}>Notifications:</span>
             <span style={styles.statusValue}>{statusText}</span>
           </div>
-          <div style={styles.secondaryText}>{status?.secondaryText ?? ""}</div>
+          <div style={styles.secondaryText}>{notificationStatus?.secondaryText ?? ""}</div>
 
           <div style={styles.buttonRow}>
             <button
               type="button"
               onClick={handlePrimary}
-              disabled={actionState === "working" || status?.permission === "unsupported"}
+              disabled={
+                actionState === "working" || notificationStatus?.permission === "unsupported"
+              }
               style={{
                 ...styles.primaryButton,
                 opacity: actionState === "working" ? 0.6 : 1,

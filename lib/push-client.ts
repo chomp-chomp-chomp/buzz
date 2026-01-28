@@ -50,10 +50,10 @@ export async function getNotificationStatus(): Promise<NotificationStatus> {
   let subscriptionExists = false;
   if (permission === "granted" && supportsServiceWorker && supportsPush) {
     try {
-      const registration = await navigator.serviceWorker.getRegistration();
-      if (registration) {
-        const subscription = await registration.pushManager.getSubscription();
-        subscriptionExists = !!subscription;
+      const serviceWorkerReg = await navigator.serviceWorker.getRegistration();
+      if (serviceWorkerReg) {
+        const pushSubscription = await serviceWorkerReg.pushManager.getSubscription();
+        subscriptionExists = !!pushSubscription;
       }
     } catch (error) {
       console.warn("Push subscription check failed:", error);
@@ -111,38 +111,39 @@ export async function ensurePushSubscription({
     throw new Error("Notifications are not granted.");
   }
 
-  const existingRegistration = await navigator.serviceWorker.getRegistration();
-  if (!existingRegistration) {
+  let serviceWorkerReg = await navigator.serviceWorker.getRegistration();
+  if (!serviceWorkerReg) {
     await navigator.serviceWorker.register("/sw.js");
   }
 
-  const readyRegistration = await navigator.serviceWorker.ready;
+  serviceWorkerReg = await navigator.serviceWorker.ready;
 
-  let subscription = await readyRegistration.pushManager.getSubscription();
+  let pushSubscription = await serviceWorkerReg.pushManager.getSubscription();
 
-  if (forceResubscribe && subscription) {
-    await subscription.unsubscribe();
-    subscription = null;
+  if (forceResubscribe && pushSubscription) {
+    await pushSubscription.unsubscribe();
+    pushSubscription = null;
   }
 
-  if (!subscription) {
+  if (!pushSubscription) {
     const vapidRes = await fetch("/api/vapid-key");
     const vapidData = (await vapidRes.json()) as { publicKey?: string | null };
-    if (!vapidData.publicKey) {
+    const vapidPublicKey = vapidData.publicKey;
+    if (!vapidPublicKey) {
       throw new Error("Missing VAPID key.");
     }
 
-    subscription = await readyRegistration.pushManager.subscribe({
+    pushSubscription = await serviceWorkerReg.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(vapidData.publicKey),
+      applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
     });
   }
 
-  if (subscription) {
+  if (pushSubscription) {
     const res = await fetch("/api/push/subscribe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(subscription.toJSON()),
+      body: JSON.stringify(pushSubscription.toJSON()),
     });
 
     if (!res.ok) {
@@ -151,7 +152,60 @@ export async function ensurePushSubscription({
     }
   }
 
-  return { subExists: !!subscription, sub: subscription };
+  return { subExists: !!pushSubscription, sub: pushSubscription };
+}
+
+export async function resubscribePushNotifications(): Promise<PushSubscription> {
+  if (typeof window === "undefined") {
+    throw new Error("Push subscriptions require a browser context.");
+  }
+  if (!("serviceWorker" in navigator)) {
+    throw new Error("Service workers are not available.");
+  }
+  if (!("PushManager" in window)) {
+    throw new Error("Push notifications are not supported.");
+  }
+  if (!("Notification" in window) || Notification.permission !== "granted") {
+    throw new Error("Notifications are not granted.");
+  }
+
+  let serviceWorkerReg = await navigator.serviceWorker.getRegistration();
+  if (serviceWorkerReg) {
+    await serviceWorkerReg.unregister();
+  }
+
+  await navigator.serviceWorker.register("/sw.js");
+  serviceWorkerReg = await navigator.serviceWorker.ready;
+
+  let pushSubscription = await serviceWorkerReg.pushManager.getSubscription();
+  if (pushSubscription) {
+    await pushSubscription.unsubscribe();
+  }
+
+  const vapidRes = await fetch("/api/vapid-key");
+  const vapidData = (await vapidRes.json()) as { publicKey?: string | null };
+  const vapidPublicKey = vapidData.publicKey;
+  if (!vapidPublicKey) {
+    throw new Error("Missing VAPID key.");
+  }
+
+  pushSubscription = await serviceWorkerReg.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+  });
+
+  const res = await fetch("/api/push/subscribe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(pushSubscription.toJSON()),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Subscription save failed (${res.status}): ${body}`);
+  }
+
+  return pushSubscription;
 }
 
 function urlBase64ToUint8Array(base64String: string): ArrayBuffer {
