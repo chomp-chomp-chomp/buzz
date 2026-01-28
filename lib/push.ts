@@ -124,33 +124,41 @@ async function createVapidJwt(
 }
 
 /**
- * Convert DER-encoded ECDSA signature to raw format (r || s)
- * DER: 0x30 [len] 0x02 [r-len] [r] 0x02 [s-len] [s]
- * Raw: [r padded to 32 bytes] [s padded to 32 bytes]
+ * Convert ECDSA signature to raw format (r || s, 64 bytes)
+ * Cloudflare Workers may return raw format directly (64 bytes),
+ * while other runtimes return DER-encoded format.
  */
-function derToRaw(der: Uint8Array): Uint8Array {
-  const raw = new Uint8Array(64);
+function derToRaw(sig: Uint8Array): Uint8Array {
+  // Already raw format (r || s, 64 bytes)
+  if (sig.length === 64) {
+    return sig;
+  }
 
+  // DER format: 0x30 [len] 0x02 [r-len] [r] 0x02 [s-len] [s]
+  if (sig[0] !== 0x30) {
+    throw new Error(`Unknown signature format: length=${sig.length}, first byte=0x${sig[0].toString(16)}`);
+  }
+
+  const raw = new Uint8Array(64);
   let offset = 2; // Skip 0x30 and total length byte
 
   // Read r
-  if (der[offset] !== 0x02) throw new Error('Invalid DER: expected 0x02 for r');
+  if (sig[offset] !== 0x02) throw new Error('Invalid DER: expected 0x02 for r');
   offset++;
-  const rLen = der[offset];
+  const rLen = sig[offset];
   offset++;
-  // r might have leading zero for sign, skip it if present
-  const rStart = (rLen === 33 && der[offset] === 0) ? offset + 1 : offset;
-  const rBytes = der.slice(rStart, offset + rLen);
+  const rStart = (rLen === 33 && sig[offset] === 0) ? offset + 1 : offset;
+  const rBytes = sig.slice(rStart, offset + rLen);
   raw.set(rBytes, 32 - rBytes.length);
   offset += rLen;
 
   // Read s
-  if (der[offset] !== 0x02) throw new Error('Invalid DER: expected 0x02 for s');
+  if (sig[offset] !== 0x02) throw new Error('Invalid DER: expected 0x02 for s');
   offset++;
-  const sLen = der[offset];
+  const sLen = sig[offset];
   offset++;
-  const sStart = (sLen === 33 && der[offset] === 0) ? offset + 1 : offset;
-  const sBytes = der.slice(sStart, offset + sLen);
+  const sStart = (sLen === 33 && sig[offset] === 0) ? offset + 1 : offset;
+  const sBytes = sig.slice(sStart, offset + sLen);
   raw.set(sBytes, 64 - sBytes.length);
 
   return raw;
