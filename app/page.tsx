@@ -410,6 +410,13 @@ export default function HomePage() {
   const debugPanel = devMode ? (
     <section style={styles.debugPanel}>
       <div style={styles.debugTitle}>Debug log</div>
+      <button
+        type="button"
+        onClick={subscribeToPush}
+        style={{ fontSize: 12, padding: "6px 12px", marginBottom: 8, border: "1px solid #ccc", borderRadius: 4, background: "#fff" }}
+      >
+        Enable Notifications
+      </button>
       <div style={styles.debugBody}>
         {debugLogs.length === 0 ? "No logs yet." : debugLogs.join("\n")}
       </div>
