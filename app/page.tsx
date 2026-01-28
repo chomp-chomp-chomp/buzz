@@ -269,6 +269,78 @@ export default function HomePage() {
     }
   }
 
+  async function ensurePushSubscription({ forceResubscribe }: { forceResubscribe: boolean }) {
+    if (!("serviceWorker" in navigator)) {
+      logDebug("push: serviceWorker not available");
+      return;
+    }
+    if (!("PushManager" in window)) {
+      logDebug("push: PushManager not available");
+      return;
+    }
+
+    logDebug("push: waiting for service worker ready");
+    const registration = await navigator.serviceWorker.ready;
+    logDebug("push: service worker ready");
+
+    let subscription = await registration.pushManager.getSubscription();
+    logDebug(`push: existing subscription: ${subscription ? "yes" : "no"}`);
+
+    if (subscription && forceResubscribe) {
+      await subscription.unsubscribe();
+      subscription = null;
+      logDebug("push: unsubscribed existing (force)");
+    }
+
+    if (!subscription) {
+      logDebug("push: fetching VAPID key");
+      const vapidRes = await fetch("/api/vapid-key");
+      const vapidData = (await vapidRes.json()) as { publicKey?: string };
+      logDebug(`push: VAPID key: ${vapidData.publicKey ? "present" : "MISSING"}`);
+      if (!vapidData.publicKey) {
+        logDebug("push: no VAPID key, aborting");
+        return;
+      }
+
+      const padding = "=".repeat((4 - (vapidData.publicKey.length % 4)) % 4);
+      const base64 = (vapidData.publicKey + padding)
+        .replace(/-/g, "+")
+        .replace(/_/g, "/");
+      const rawData = window.atob(base64);
+      const applicationServerKey = new Uint8Array(rawData.length);
+      for (let i = 0; i < rawData.length; i++) {
+        applicationServerKey[i] = rawData.charCodeAt(i);
+      }
+
+      logDebug("push: creating subscription");
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey,
+      });
+      logDebug(`push: subscription created: ${subscription ? "yes" : "no"}`);
+    }
+
+    if (subscription) {
+      logDebug("push: sending subscription to server");
+      const res = await fetch("/api/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deviceId,
+          subscription: subscription.toJSON(),
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.text();
+        logDebug(`push: server save failed (${res.status}) ${body}`);
+        return;
+      }
+      logDebug("push: subscription saved to server");
+    } else {
+      logDebug("push: no subscription to save");
+    }
+  }
+
   // Handle pairing
   async function handlePair(code: string) {
     try {
