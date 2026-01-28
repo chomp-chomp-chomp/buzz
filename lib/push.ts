@@ -25,15 +25,25 @@ export async function sendPushNotification(
   vapidSubject: string
 ): Promise<boolean> {
   if (!member.push_endpoint || !member.push_p256dh || !member.push_auth) {
+    console.log('Push: Missing push credentials for member');
     return false;
   }
 
   try {
-    // Import the VAPID private key
-    const privateKeyData = base64UrlDecode(vapidPrivateKey);
+    // Import the VAPID private key (raw 32-byte EC key as JWK)
+    const privateKeyBytes = new Uint8Array(base64UrlDecode(vapidPrivateKey));
+    const publicKeyBytes = new Uint8Array(base64UrlDecode(vapidPublicKey));
+
+    // Import as JWK - public key is 65 bytes (0x04 + x + y), private is 32 bytes
     const privateKey = await crypto.subtle.importKey(
-      'pkcs8',
-      privateKeyData,
+      'jwk',
+      {
+        kty: 'EC',
+        crv: 'P-256',
+        x: base64UrlEncode(publicKeyBytes.slice(1, 33)),
+        y: base64UrlEncode(publicKeyBytes.slice(33, 65)),
+        d: base64UrlEncode(privateKeyBytes),
+      },
       { name: 'ECDSA', namedCurve: 'P-256' },
       false,
       ['sign']
@@ -43,8 +53,7 @@ export async function sendPushNotification(
     const jwt = await createVapidJwt(
       member.push_endpoint,
       vapidSubject,
-      privateKey,
-      vapidPublicKey
+      privateKey
     );
 
     // Encrypt the payload
@@ -66,6 +75,11 @@ export async function sendPushNotification(
       body: toArrayBuffer(encryptedPayload),
     });
 
+    if (!response.ok && response.status !== 201) {
+      const text = await response.text().catch(() => '');
+      console.error('Push failed:', response.status, text);
+    }
+
     return response.ok || response.status === 201;
   } catch (error) {
     console.error('Push notification failed:', error);
@@ -79,8 +93,7 @@ export async function sendPushNotification(
 async function createVapidJwt(
   endpoint: string,
   subject: string,
-  privateKey: CryptoKey,
-  publicKey: string
+  privateKey: CryptoKey
 ): Promise<string> {
   const url = new URL(endpoint);
   const audience = `${url.protocol}//${url.host}`;
@@ -103,10 +116,44 @@ async function createVapidJwt(
     new TextEncoder().encode(unsignedToken)
   );
 
-  // Convert from DER to raw format (r || s)
-  const signatureB64 = base64UrlEncode(new Uint8Array(signature));
+  // Convert from DER to raw format (r || s, 64 bytes total)
+  const rawSignature = derToRaw(new Uint8Array(signature));
+  const signatureB64 = base64UrlEncode(rawSignature);
 
   return `${unsignedToken}.${signatureB64}`;
+}
+
+/**
+ * Convert DER-encoded ECDSA signature to raw format (r || s)
+ * DER: 0x30 [len] 0x02 [r-len] [r] 0x02 [s-len] [s]
+ * Raw: [r padded to 32 bytes] [s padded to 32 bytes]
+ */
+function derToRaw(der: Uint8Array): Uint8Array {
+  const raw = new Uint8Array(64);
+
+  let offset = 2; // Skip 0x30 and total length byte
+
+  // Read r
+  if (der[offset] !== 0x02) throw new Error('Invalid DER: expected 0x02 for r');
+  offset++;
+  const rLen = der[offset];
+  offset++;
+  // r might have leading zero for sign, skip it if present
+  const rStart = (rLen === 33 && der[offset] === 0) ? offset + 1 : offset;
+  const rBytes = der.slice(rStart, offset + rLen);
+  raw.set(rBytes, 32 - rBytes.length);
+  offset += rLen;
+
+  // Read s
+  if (der[offset] !== 0x02) throw new Error('Invalid DER: expected 0x02 for s');
+  offset++;
+  const sLen = der[offset];
+  offset++;
+  const sStart = (sLen === 33 && der[offset] === 0) ? offset + 1 : offset;
+  const sBytes = der.slice(sStart, offset + sLen);
+  raw.set(sBytes, 64 - sBytes.length);
+
+  return raw;
 }
 
 /**
