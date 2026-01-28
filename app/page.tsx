@@ -535,7 +535,7 @@ export default function HomePage() {
           }}
         >
           <Image
-            src={inOven ? "/heart-cookie.png" : "/round-cookie.svg"}
+            src={inOven ? "/heart-cookie.png" : "/round-cookie.png"}
             alt="Cookie"
             width={240}
             height={240}
