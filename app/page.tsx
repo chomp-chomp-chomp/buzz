@@ -208,22 +208,43 @@ export default function HomePage() {
 
   // Subscribe to push notifications
   async function subscribeToPush() {
-    if (!("PushManager" in window)) return;
-    if (!("serviceWorker" in navigator)) return;
+    logDebug("push: starting subscription flow");
+
+    if (!("PushManager" in window)) {
+      logDebug("push: PushManager not available");
+      return;
+    }
+    if (!("serviceWorker" in navigator)) {
+      logDebug("push: serviceWorker not available");
+      return;
+    }
 
     try {
+      logDebug("push: waiting for service worker ready");
       const registration = await navigator.serviceWorker.ready;
+      logDebug("push: service worker ready");
+
       let subscription = await registration.pushManager.getSubscription();
+      logDebug(`push: existing subscription: ${subscription ? "yes" : "no"}`);
 
       if (!subscription) {
+        logDebug("push: requesting notification permission");
         const permission = await Notification.requestPermission();
-        logDebug(`notification permission: ${permission}`);
-        if (permission !== "granted") return;
+        logDebug(`push: permission result: ${permission}`);
+        if (permission !== "granted") {
+          logDebug("push: permission denied, aborting");
+          return;
+        }
 
         // Get VAPID public key from server
+        logDebug("push: fetching VAPID key");
         const vapidRes = await fetch("/api/vapid-key");
         const vapidData = await vapidRes.json() as { publicKey?: string };
-        if (!vapidData.publicKey) return;
+        logDebug(`push: VAPID key: ${vapidData.publicKey ? "present" : "MISSING"}`);
+        if (!vapidData.publicKey) {
+          logDebug("push: no VAPID key, aborting");
+          return;
+        }
 
         // Convert base64 to Uint8Array
         const urlBase64ToUint8Array = (base64String: string) => {
@@ -240,13 +261,16 @@ export default function HomePage() {
         };
 
         // Create subscription
+        logDebug("push: creating subscription");
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(vapidData.publicKey),
         });
+        logDebug(`push: subscription created: ${subscription ? "yes" : "no"}`);
       }
 
       if (subscription) {
+        logDebug("push: sending subscription to server");
         const res = await fetch("/api/subscribe", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -257,14 +281,16 @@ export default function HomePage() {
         });
         if (!res.ok) {
           const body = await res.text();
-          logDebug(`push subscribe failed (${res.status}) ${body}`);
+          logDebug(`push: server save failed (${res.status}) ${body}`);
           return;
         }
-        logDebug("push subscribed");
+        logDebug("push: subscription saved to server");
+      } else {
+        logDebug("push: no subscription to save");
       }
     } catch (e) {
       console.error("Push subscription failed:", e);
-      logDebug("push subscribe failed (network)");
+      logDebug(`push: error - ${e}`);
     }
   }
 
