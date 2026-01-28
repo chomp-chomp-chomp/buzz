@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cooling — 1‑pager</title>
+  <style>
+    :root{
+      --fg:#111;
+      --muted:rgba(0,0,0,.62);
+      --hair:rgba(0,0,0,.14);
+      --bg:#fff;
+      --max:720px;
+    }
+    html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);}
+    body{
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      -webkit-font-smoothing:antialiased;
+      text-rendering:optimizeLegibility;
+      line-height:1.55;
+    }
+    .wrap{
+      max-width:var(--max);
+      margin:0 auto;
+      padding:1.75rem 1.25rem 3rem;
+    }
+    a{color:inherit;text-decoration:none;}
+    a:hover{text-decoration:underline;}
+    .back{
+      display:inline-flex;
+      align-items:center;
+      gap:.4rem;
+      font-size:.98rem;
+      color:var(--muted);
+      margin-bottom:1.25rem;
+    }
+    h1{
+      font-size:1.55rem;
+      font-weight:700;
+      letter-spacing:-0.01em;
+      margin:0 0 1.35rem 0;
+    }
+    h2{
+      font-size:1.06rem;
+      font-weight:700;
+      margin:0;
+    }
+    p{
+      font-size:1.02rem;
+      margin:0 0 .65rem 0;
+    }
+    .section{
+      padding:1rem 0 1.1rem;
+      border-top:1px solid var(--hair);
+    }
+    .section:first-of-type{
+      border-top:none;
+      padding-top:0;
+    }
+    .section-head{
+      display:flex;
+      align-items:baseline;
+      justify-content:space-between;
+      gap:1rem;
+      margin-bottom:.75rem;
+    }
+    .chev{
+      color:var(--muted);
+      font-size:1rem;
+      user-select:none;
+    }
+    .tight p{ margin-bottom:.55rem; }
+
+    @media print{
+      .wrap{max-width:none;padding:0.9in;}
+      .back{display:none;}
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <a class="back" href="/">
+      <span aria-hidden="true">←</span><span>Back</span>
+    </a>
+
+    <h1>Cooling</h1>
+
+    <section class="section tight" aria-label="Servings">
+      <div class="section-head">
+        <h2>Servings</h2>
+        <span class="chev" aria-hidden="true">▸</span>
+      </div>
+      <p>Cooling is a small, private mobile app for two people.</p>
+      <p>Either person can perform a single action called Chomp.</p>
+      <p>A Chomp sends a quiet buzz to the other person. The notification contains no message, explanation, or instruction.</p>
+      <p>A Chomp also places something in the oven for the sender for exactly 108 seconds.</p>
+      <p>While something is in the oven, the app shows “in the oven • N seconds”. When the oven time ends, the app returns to “Cooling”.</p>
+      <p>There is no chat.</p>
+      <p>There are no replies.</p>
+      <p>There is no obligation to respond.</p>
+    </section>
+
+    <section class="section tight" aria-label="Ingredients">
+      <div class="section-head">
+        <h2>Ingredients</h2>
+        <span class="chev" aria-hidden="true">▸</span>
+      </div>
+      <p>Cooling never names what is in the oven. It may be affection, irritation, longing, attention, grief, or nothing in particular.</p>
+      <p>Naming it would turn it into content.</p>
+      <p>Measuring it would turn it into work.</p>
+      <p>The app leaves it unspecified on purpose.</p>
+      <p>Each person’s oven is independent. There is no turn-taking and no synchronization. It shows only one historical signal: “last chomp: just now / 12m ago / 3h ago / yesterday”.</p>
+      <p>The app enforces restraint quietly and without reward.</p>
+      <p>The oven time is finite and precise.</p>
+      <p>Everything else is cooling.</p>
+    </section>
+
+    <section class="section tight" aria-label="Nutrition">
+      <div class="section-head">
+        <h2>Nutrition</h2>
+        <span class="chev" aria-hidden="true">▸</span>
+      </div>
+      <p>Cooling deliberately avoids messaging threads, read receipts, presence indicators, analytics, streaks, reminders, and growth mechanics.</p>
+      <p>These features convert care into labor and attention into performance.</p>
+      <p>Cooling refuses that conversion.</p>
+    </section>
+
+    <section class="section tight" aria-label="Done">
+      <div class="section-head">
+        <h2>Done</h2>
+        <span class="chev" aria-hidden="true">▸</span>
+      </div>
+      <p>Cooling is complete by design.</p>
+      <p>It has no roadmap.</p>
+      <p>It does not seek improvement through addition.</p>
+      <p>There is no recipe.</p>
+      <p>If it adds replies, metrics, optimization, or explanation, it should be considered broken.</p>
+      <p>Cooling is everything besides putting something briefly in the oven.</p>
+    </section>
+  </main>
+</body>
+</html>
