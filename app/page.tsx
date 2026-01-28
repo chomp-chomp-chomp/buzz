@@ -599,6 +599,10 @@ export default function HomePage() {
         <Link href="/about" style={styles.footerLink}>
           About
         </Link>
+        <span style={styles.footerSep}>·</span>
+        <Link href="/api/debug" style={styles.footerLink}>
+          Debug
+        </Link>
       </footer>
       {debugPanel}
     </main>
@@ -687,6 +691,11 @@ const styles: Record<string, React.CSSProperties> = {
     opacity: 0.7,
     textDecoration: "none",
     color: "inherit",
+  },
+  footerSep: {
+    fontSize: 13,
+    opacity: 0.4,
+    margin: "0 8px",
   },
   debugPanel: {
     borderTop: "1px solid rgba(0, 0, 0, 0.1)",
