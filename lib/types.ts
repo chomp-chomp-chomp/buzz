@@ -22,6 +22,7 @@ export interface Member {
   push_p256dh: string | null;
   push_auth: string | null;
   last_chomp_at: number | null;
+  last_received_at: number | null;
   created_at: number;
 }
 
@@ -49,6 +50,9 @@ export interface StatusResponse {
   state: 'cooling' | 'oven';
   ovenRemainingSeconds: number;
   lastChompRelative: string;
+  serverNow?: number;
+  lastSentAt?: number | null;
+  lastReceivedAt?: number | null;
 }
 
 export interface SubscribeRequest {

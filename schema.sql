@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS members (
   push_p256dh TEXT,
   push_auth TEXT,
   last_chomp_at INTEGER,
+  last_received_at INTEGER,
   created_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 
