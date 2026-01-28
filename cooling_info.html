@@ -79,13 +79,6 @@
     .chevron.open {
       transform: rotate(90deg);
     }
-    .microcopy-wrap {
-      padding: 0 14px 6px;
-    }
-    .microcopy {
-      font-size: 12.5px;
-      opacity: 0.6;
-    }
     .panel-outer {
       display: grid;
       grid-template-rows: 0fr;
@@ -131,9 +124,6 @@
           <span class="title">Servings</span>
           <span class="chevron open" aria-hidden="true">▸</span>
         </button>
-        <div class="microcopy-wrap">
-          <div class="microcopy">Additional sections below.</div>
-        </div>
         <div id="panel-servings" class="panel-outer open" role="region">
           <div class="panel-inner">
             <div class="panel-content">
@@ -158,11 +148,11 @@ There is no obligation to respond.</div>
 
       <!-- Ingredients -->
       <div class="item" role="listitem">
-        <button type="button" class="row-button" aria-expanded="false" aria-controls="panel-ingredients" onclick="toggle(this, 'panel-ingredients')">
+        <button type="button" class="row-button" aria-expanded="true" aria-controls="panel-ingredients" onclick="toggle(this, 'panel-ingredients')">
           <span class="title">Ingredients</span>
-          <span class="chevron" aria-hidden="true">▸</span>
+          <span class="chevron open" aria-hidden="true">▸</span>
         </button>
-        <div id="panel-ingredients" class="panel-outer" role="region">
+        <div id="panel-ingredients" class="panel-outer open" role="region">
           <div class="panel-inner">
             <div class="panel-content">
               <div class="text-block">Cooling never names what is in the oven. It may be affection, irritation, longing, attention, grief, or nothing in particular.
@@ -186,11 +176,11 @@ Everything else is cooling.</div>
 
       <!-- Nutrition -->
       <div class="item" role="listitem">
-        <button type="button" class="row-button" aria-expanded="false" aria-controls="panel-nutrition" onclick="toggle(this, 'panel-nutrition')">
+        <button type="button" class="row-button" aria-expanded="true" aria-controls="panel-nutrition" onclick="toggle(this, 'panel-nutrition')">
           <span class="title">Nutrition</span>
-          <span class="chevron" aria-hidden="true">▸</span>
+          <span class="chevron open" aria-hidden="true">▸</span>
         </button>
-        <div id="panel-nutrition" class="panel-outer" role="region">
+        <div id="panel-nutrition" class="panel-outer open" role="region">
           <div class="panel-inner">
             <div class="panel-content">
               <div class="text-block">Cooling deliberately avoids messaging threads, read receipts, presence indicators, analytics, streaks, reminders, and growth mechanics.
@@ -206,11 +196,11 @@ Cooling refuses that conversion.</div>
 
       <!-- Done -->
       <div class="item" role="listitem">
-        <button type="button" class="row-button" aria-expanded="false" aria-controls="panel-done" onclick="toggle(this, 'panel-done')">
+        <button type="button" class="row-button" aria-expanded="true" aria-controls="panel-done" onclick="toggle(this, 'panel-done')">
           <span class="title">Done</span>
-          <span class="chevron" aria-hidden="true">▸</span>
+          <span class="chevron open" aria-hidden="true">▸</span>
         </button>
-        <div id="panel-done" class="panel-outer" role="region">
+        <div id="panel-done" class="panel-outer open" role="region">
           <div class="panel-inner">
             <div class="panel-content">
               <div class="text-block">Cooling is complete by design.
@@ -232,18 +222,17 @@ Cooling is everything besides putting something briefly in the oven.</div>
   </main>
 
   <script>
+    // Toggle individual sections (allows multiple open)
     function toggle(button, panelId) {
       const panel = document.getElementById(panelId);
       const chevron = button.querySelector('.chevron');
       const isOpen = panel.classList.contains('open');
 
-      // Close all panels first (one-open-at-a-time accordion)
-      document.querySelectorAll('.panel-outer').forEach(p => p.classList.remove('open'));
-      document.querySelectorAll('.chevron').forEach(c => c.classList.remove('open'));
-      document.querySelectorAll('.row-button').forEach(b => b.setAttribute('aria-expanded', 'false'));
-
-      // Open clicked panel if it was closed
-      if (!isOpen) {
+      if (isOpen) {
+        panel.classList.remove('open');
+        chevron.classList.remove('open');
+        button.setAttribute('aria-expanded', 'false');
+      } else {
         panel.classList.add('open');
         chevron.classList.add('open');
         button.setAttribute('aria-expanded', 'true');
