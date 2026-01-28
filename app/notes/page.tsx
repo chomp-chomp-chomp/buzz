@@ -286,6 +286,12 @@ export default function Notes() {
             );
           })}
         </div>
+
+        <div style={styles.fixLink}>
+          <Link href="/notifications" style={styles.subtleLink}>
+            Fix notifications
+          </Link>
+        </div>
       </div>
     </main>
   );
@@ -381,5 +387,15 @@ const styles: Record<string, React.CSSProperties> = {
   divider: {
     height: 1,
     background: "rgba(0,0,0,0.06)",
+  },
+  fixLink: {
+    marginTop: 24,
+    textAlign: "center",
+  },
+  subtleLink: {
+    fontSize: 13,
+    textDecoration: "none",
+    color: "inherit",
+    opacity: 0.5,
   },
 };

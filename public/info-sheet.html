@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cooling — Info</title>
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #ffffff;
+      color: #111;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 24px 18px 48px;
+    }
+    .nav {
+      margin-bottom: 8px;
+    }
+    .back-link {
+      font-size: 13px;
+      text-decoration: none;
+      color: inherit;
+      opacity: 0.6;
+    }
+    .back-link:hover {
+      text-decoration: underline;
+    }
+    h1 {
+      font-size: 20px;
+      font-weight: 600;
+      margin: 4px 0 16px;
+      letter-spacing: 0.2px;
+    }
+    .accordion {
+      border-radius: 12px;
+      border: 1px solid rgba(0,0,0,0.08);
+      overflow: hidden;
+    }
+    .item {
+      background: #fff;
+    }
+    .row-button {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      text-align: left;
+      min-height: 48px;
+      font-family: inherit;
+    }
+    .title {
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .chevron {
+      font-size: 16px;
+      line-height: 16px;
+      transition: transform 180ms cubic-bezier(0.2, 0.0, 0.0, 1.0);
+      opacity: 0.85;
+    }
+    .chevron.open {
+      transform: rotate(90deg);
+    }
+    .panel-outer {
+      display: grid;
+      grid-template-rows: 0fr;
+      transition: grid-template-rows 220ms cubic-bezier(0.2, 0.0, 0.0, 1.0);
+    }
+    .panel-outer.open {
+      grid-template-rows: 1fr;
+    }
+    .panel-inner {
+      overflow: hidden;
+    }
+    .panel-content {
+      padding: 8px 14px 14px;
+    }
+    .text-block {
+      white-space: pre-wrap;
+      line-height: 1.5;
+      font-size: 14px;
+      opacity: 0.95;
+    }
+    .divider {
+      height: 1px;
+      background: rgba(0,0,0,0.06);
+    }
+
+    @media print {
+      .container { max-width: none; padding: 0.9in; }
+      .nav { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <nav class="nav">
+      <a href="/" class="back-link">← Back</a>
+    </nav>
+    <h1>Cooling</h1>
+
+    <div class="accordion" role="list">
+      <!-- Servings -->
+      <div class="item" role="listitem">
+        <button type="button" class="row-button" aria-expanded="true" aria-controls="panel-servings" onclick="toggle(this, 'panel-servings')">
+          <span class="title">Servings</span>
+          <span class="chevron open" aria-hidden="true">▸</span>
+        </button>
+        <div id="panel-servings" class="panel-outer open" role="region">
+          <div class="panel-inner">
+            <div class="panel-content">
+              <div class="text-block">Cooling is a small, private mobile app for two people.
+
+Either person can perform a single action called Chomp.
+
+A Chomp sends a quiet buzz to the other person. The notification contains no message, explanation, or instruction.
+
+A Chomp also places something in the oven for the sender for exactly 108 seconds.
+
+While something is in the oven, the app shows "in the oven • N seconds". When the oven time ends, the app returns to "Cooling".
+
+There is no chat.
+There are no replies.
+There is no obligation to respond.</div>
+            </div>
+          </div>
+        </div>
+        <div class="divider"></div>
+      </div>
+
+      <!-- Ingredients -->
+      <div class="item" role="listitem">
+        <button type="button" class="row-button" aria-expanded="true" aria-controls="panel-ingredients" onclick="toggle(this, 'panel-ingredients')">
+          <span class="title">Ingredients</span>
+          <span class="chevron open" aria-hidden="true">▸</span>
+        </button>
+        <div id="panel-ingredients" class="panel-outer open" role="region">
+          <div class="panel-inner">
+            <div class="panel-content">
+              <div class="text-block">Cooling never names what is in the oven. It may be affection, irritation, longing, attention, grief, or nothing in particular.
+
+Naming it would turn it into content.
+Measuring it would turn it into work.
+
+The app leaves it unspecified on purpose.
+
+Each person's oven is independent. There is no turn-taking and no synchronization. It shows only one historical signal: "last chomp: just now / 12m ago / 3h ago / yesterday".
+
+The app enforces restraint quietly and without reward.
+
+The oven time is finite and precise.
+Everything else is cooling.</div>
+            </div>
+          </div>
+        </div>
+        <div class="divider"></div>
+      </div>
+
+      <!-- Nutrition -->
+      <div class="item" role="listitem">
+        <button type="button" class="row-button" aria-expanded="true" aria-controls="panel-nutrition" onclick="toggle(this, 'panel-nutrition')">
+          <span class="title">Nutrition</span>
+          <span class="chevron open" aria-hidden="true">▸</span>
+        </button>
+        <div id="panel-nutrition" class="panel-outer open" role="region">
+          <div class="panel-inner">
+            <div class="panel-content">
+              <div class="text-block">Cooling deliberately avoids messaging threads, read receipts, presence indicators, analytics, streaks, reminders, and growth mechanics.
+
+These features convert care into labor and attention into performance.
+
+Cooling refuses that conversion.</div>
+            </div>
+          </div>
+        </div>
+        <div class="divider"></div>
+      </div>
+
+      <!-- Done -->
+      <div class="item" role="listitem">
+        <button type="button" class="row-button" aria-expanded="true" aria-controls="panel-done" onclick="toggle(this, 'panel-done')">
+          <span class="title">Done</span>
+          <span class="chevron open" aria-hidden="true">▸</span>
+        </button>
+        <div id="panel-done" class="panel-outer open" role="region">
+          <div class="panel-inner">
+            <div class="panel-content">
+              <div class="text-block">Cooling is complete by design.
+
+It has no roadmap.
+It does not seek improvement through addition.
+
+There is no recipe.
+
+If it adds replies, metrics, optimization, or explanation, it should be considered broken.
+
+Cooling is everything besides putting something briefly in the oven.</div>
+            </div>
+          </div>
+        </div>
+        <div class="divider"></div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // Toggle individual sections (allows multiple open)
+    function toggle(button, panelId) {
+      const panel = document.getElementById(panelId);
+      const chevron = button.querySelector('.chevron');
+      const isOpen = panel.classList.contains('open');
+
+      if (isOpen) {
+        panel.classList.remove('open');
+        chevron.classList.remove('open');
+        button.setAttribute('aria-expanded', 'false');
+      } else {
+        panel.classList.add('open');
+        chevron.classList.add('open');
+        button.setAttribute('aria-expanded', 'true');
+      }
+    }
+  </script>
+</body>
+</html>

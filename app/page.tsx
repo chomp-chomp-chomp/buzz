@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 type AppState = "loading" | "install" | "pair" | "waiting" | "ready";
 
@@ -22,6 +22,8 @@ export default function HomePage() {
   const [deviceId, setDeviceId] = useState<string>("");
   const [debugLogs, setDebugLogs] = useState<string[]>([]);
   const [devMode, setDevMode] = useState(false);
+  const buzzAudioRef = useRef<HTMLAudioElement | null>(null);
+  const prevReceivedRef = useRef<number>(0);
 
   const logDebug = useCallback((message: string) => {
     const timestamp = new Date().toLocaleTimeString();
@@ -33,6 +35,31 @@ export default function HomePage() {
     const params = new URLSearchParams(window.location.search);
     setDevMode(params.get("dev") === "1");
   }, []);
+
+  // Initialize buzz audio
+  useEffect(() => {
+    buzzAudioRef.current = new Audio("/buzz.mp3");
+    buzzAudioRef.current.preload = "auto";
+  }, []);
+
+  const playBuzz = useCallback(() => {
+    try {
+      if (buzzAudioRef.current) {
+        buzzAudioRef.current.currentTime = 0;
+        buzzAudioRef.current.play().catch(() => {});
+      }
+    } catch (e) {
+      // Audio playback may be blocked
+    }
+  }, []);
+
+  // Detect new chomps from polling (receivedRemaining goes from 0 to >0)
+  useEffect(() => {
+    if (receivedRemaining > 0 && prevReceivedRef.current === 0) {
+      playBuzz();
+    }
+    prevReceivedRef.current = receivedRemaining;
+  }, [receivedRemaining, playBuzz]);
 
   // Check if running in standalone mode (installed PWA)
   // Add ?dev=1 to URL to bypass for testing
@@ -106,6 +133,19 @@ export default function HomePage() {
     }
   }, [logDebug]);
 
+  // Listen for service worker messages (push received while app is open)
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type === "chomp-received") {
+        playBuzz();
+        fetchStatus();
+      }
+    };
+    navigator.serviceWorker.addEventListener("message", handler);
+    return () => navigator.serviceWorker.removeEventListener("message", handler);
+  }, [playBuzz, fetchStatus]);
+
   // Initialize app state
   useEffect(() => {
     async function init() {
@@ -115,10 +155,11 @@ export default function HomePage() {
         return;
       }
 
-      // Register service worker
+      // Register service worker and force update
       if ("serviceWorker" in navigator) {
         try {
-          await navigator.serviceWorker.register("/sw.js");
+          const reg = await navigator.serviceWorker.register("/sw.js");
+          reg.update();
         } catch (e) {
           console.error("SW registration failed:", e);
         }
@@ -598,14 +639,6 @@ export default function HomePage() {
       <footer style={styles.footer}>
         <Link href="/about" style={styles.footerLink}>
           About
-        </Link>
-        <span style={styles.footerSep}>·</span>
-        <Link href="/api/debug" style={styles.footerLink}>
-          Debug
-        </Link>
-        <span style={styles.footerSep}>·</span>
-        <Link href="/api/test-push" style={styles.footerLink}>
-          Test Push
         </Link>
       </footer>
       {debugPanel}
