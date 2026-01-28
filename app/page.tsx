@@ -201,6 +201,11 @@ export default function HomePage() {
     logDebug(`device ready (${deviceId.slice(0, 8)}...)`);
   }, [deviceId, logDebug]);
 
+  useEffect(() => {
+    if (!deviceId) return;
+    logDebug(`device ready (${deviceId.slice(0, 8)}...)`);
+  }, [deviceId, logDebug]);
+
   // Subscribe to push notifications
   async function subscribeToPush() {
     if (!("PushManager" in window)) return;
