@@ -215,7 +215,7 @@ export default function Notes() {
             ← Back
           </Link>
         </nav>
-        <h1 style={styles.h1}>Notes</h1>
+        <h1 style={styles.h1}>Documentation</h1>
 
         <div style={styles.accordion} role="list">
           {sections.map((s, idx) => {
@@ -253,14 +253,14 @@ export default function Notes() {
                   </span>
                 </button>
 
-                {/* Optional microcopy line after README */}
+                {/* Optional microcopy line after README 
                 {s.key === "readme" && (
                   <div style={styles.microcopyWrap}>
                     <div style={styles.microcopy}>
                       Additional documentation below.
                     </div>
                   </div>
-                )}
+                )} */}
 
                 {/* Animated panel (calm timing) */}
                 <div

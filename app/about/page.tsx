@@ -13,10 +13,10 @@ export default function AboutPage() {
           This app is complete. The rest is documentation.
         </div>
 
-        <div style={styles.label}>Documentation</div>
-
+    {/* <div style={styles.label}>Documentation</div>
+    */}
         <Link href="/notes" style={styles.link}>
-          Notes
+          Documentation
         </Link>
       </div>
     </main>
