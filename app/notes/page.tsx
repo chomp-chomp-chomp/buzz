@@ -253,14 +253,14 @@ export default function Notes() {
                   </span>
                 </button>
 
-                {/* Optional microcopy line after README */}
+                {/* Optional microcopy line after README 
                 {s.key === "readme" && (
                   <div style={styles.microcopyWrap}>
                     <div style={styles.microcopy}>
                       Additional documentation below.
                     </div>
                   </div>
-                )}
+                )} */}
 
                 {/* Animated panel (calm timing) */}
                 <div
