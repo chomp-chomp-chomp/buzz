@@ -18,9 +18,6 @@ export default function AboutPage() {
         <Link href="/notes" style={styles.link}>
           Documentation
         </Link>
-        <Link href="/notifications" style={styles.link}>
-          Notifications
-        </Link>
       </div>
     </main>
   );

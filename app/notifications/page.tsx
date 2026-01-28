@@ -1,256 +1,153 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ensurePushSubscription,
-  getNotificationStatus,
-  resubscribePushNotifications,
-  type NotificationStatus,
-} from "@/lib/push-client";
-
-type ActionState = "idle" | "working" | "success" | "error";
+import { useCallback, useEffect, useState } from "react";
 
 export default function NotificationsPage() {
-  const [notificationStatus, setNotificationStatus] = useState<NotificationStatus | null>(null);
-  const [actionState, setActionState] = useState<ActionState>("idle");
-  const [actionMessage, setActionMessage] = useState<string>("");
-  const [testMessage, setTestMessage] = useState<string>("");
-  const [helpOpen, setHelpOpen] = useState(false);
+  const [status, setStatus] = useState<string>("Checking...");
+  const [canEnable, setCanEnable] = useState(false);
+  const [deviceId, setDeviceId] = useState<string>("");
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    let id = localStorage.getItem("deviceId");
-    if (!id) {
-      id = crypto.randomUUID();
-      localStorage.setItem("deviceId", id);
-    }
-    document.cookie = `deviceId=${id}; path=/; max-age=31536000; SameSite=Strict`;
-  }, []);
-
-  const refreshStatus = useCallback(async () => {
-    const nextStatus = await getNotificationStatus();
-    setNotificationStatus(nextStatus);
+    const id = localStorage.getItem("deviceId") || "";
+    setDeviceId(id);
   }, []);
 
   useEffect(() => {
-    refreshStatus();
-  }, [refreshStatus]);
-
-  const isIos = useMemo(() => {
-    if (typeof navigator === "undefined") return false;
-    return /iphone|ipad|ipod/i.test(navigator.userAgent);
+    checkStatus();
   }, []);
 
-  const statusText = useMemo(() => {
-    if (!notificationStatus) return "loading";
-    if (notificationStatus.statusLabel === "Enabled") return "on";
-    if (notificationStatus.statusLabel === "Denied") return "denied";
-    if (notificationStatus.statusLabel === "Not installed") return "not installed";
-    return "off";
-  }, [notificationStatus]);
-
-  const primaryLabel = useMemo(() => {
-    if (!notificationStatus) return "Checking…";
-    if (notificationStatus.permission === "default") return "Enable notifications";
-    if (notificationStatus.permission === "granted") return "Fix notifications";
-    if (notificationStatus.permission === "denied") return "How to enable on iPhone";
-    return "Notifications unavailable";
-  }, [notificationStatus]);
-
-  const handlePrimary = useCallback(async () => {
-    if (!notificationStatus) return;
-
-    setActionMessage("");
-    setTestMessage("");
-    setActionState("working");
-
-    if (notificationStatus.permission === "denied") {
-      setHelpOpen(true);
-      setActionState("idle");
+  async function checkStatus() {
+    if (!("PushManager" in window)) {
+      setStatus("Push notifications are not supported on this device.");
+      return;
+    }
+    if (!("serviceWorker" in navigator)) {
+      setStatus("Service workers are not available.");
       return;
     }
 
-    if (notificationStatus.permission === "default") {
-      if (isIos && !notificationStatus.isInstalled) {
-        setActionMessage("Install to Home Screen to enable notifications on iPhone.");
-        setActionState("idle");
-        return;
-      }
-
-      if (!("Notification" in window)) {
-        setActionMessage("Notifications are not supported in this browser.");
-        setActionState("error");
-        return;
-      }
-
-      const result = await Notification.requestPermission();
-      if (result === "granted") {
-        try {
-          await ensurePushSubscription({ forceResubscribe: false });
-          setActionMessage("Notifications ready.");
-          setActionState("success");
-        } catch (error) {
-          setActionMessage("Notifications are on, but subscription failed. Try Fix.");
-          setActionState("error");
-          console.error(error);
-        }
-      } else if (result === "denied") {
-        setHelpOpen(true);
-        setActionState("idle");
-      } else {
-        setActionState("idle");
-      }
-
-      await refreshStatus();
+    const permission = Notification.permission;
+    if (permission === "denied") {
+      setStatus(
+        "Notifications are blocked. To fix this, go to Settings → Notifications → find this app → enable Allow Notifications."
+      );
       return;
     }
-
-    if (notificationStatus.permission === "granted") {
-      type PushTestResponse = {
-        ok: boolean;
-        status?: number;
-        reason?: string;
-        endpointHost?: string | null;
-        action?: string;
-      };
-
-      try {
-        const res = await fetch("/api/push/test", { method: "POST" });
-        const data = (await res.json().catch(() => null)) as PushTestResponse | null;
-        if (data?.ok) {
-          setActionMessage("Notifications ready.");
-          setActionState("success");
-          await refreshStatus();
-          return;
-        }
-
-        if (data?.action === "resubscribe") {
-          await resubscribePushNotifications();
-          setActionMessage("Notifications ready.");
-          setActionState("success");
-          await refreshStatus();
-          return;
-        }
-
-        if (data?.action === "check_vapid_keys") {
-          setActionMessage(
-            "Notifications are on, but could not send. Try Fix again or reinstall."
-          );
-          setActionState("error");
-          await refreshStatus();
-          return;
-        }
-
-        setActionMessage("Notifications are on, but could not send. Try Fix again.");
-        setActionState("error");
-      } catch (error) {
-        setActionMessage("Notifications are on, but could not send. Try Fix again.");
-        setActionState("error");
-        console.error(error);
-      }
-      await refreshStatus();
-      return;
-    }
-
-    setActionState("idle");
-  }, [notificationStatus, isIos, refreshStatus]);
-
-  const handleTest = useCallback(async () => {
-    setTestMessage("");
-    setActionState("working");
 
     try {
-      const res = await fetch("/api/push/test", { method: "POST" });
-      const data = (await res.json().catch(() => null)) as
-        | { ok: boolean; action?: string }
-        | null;
-      if (data?.ok) {
-        setTestMessage("Test sent.");
-        setActionState("success");
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        setStatus("Notifications are enabled.");
       } else {
-        setTestMessage(
-          data?.action === "resubscribe"
-            ? "Failed. Tap Fix notifications."
-            : data?.action === "check_vapid_keys"
-              ? "Notifications are on, but could not send."
-              : "Failed."
-        );
-        setActionState("error");
+        setStatus("Notifications are not enabled yet.");
+        setCanEnable(true);
       }
-    } catch (error) {
-      setTestMessage("Failed.");
-      setActionState("error");
-      console.error(error);
+    } catch (e) {
+      setStatus("Could not check notification status.");
+      setCanEnable(true);
     }
-  }, []);
+  }
 
-  const showTestButton =
-    notificationStatus?.permission === "granted" && notificationStatus.subscriptionExists;
+  const enableNotifications = useCallback(async () => {
+    setCanEnable(false);
+    setStatus("Requesting permission...");
+
+    try {
+      if (!("serviceWorker" in navigator)) {
+        setStatus("Service workers not available.");
+        return;
+      }
+
+      // Ensure SW is registered
+      const reg = await navigator.serviceWorker.ready;
+
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        setStatus(
+          "Permission was not granted. Check your device notification settings for this app."
+        );
+        setCanEnable(true);
+        return;
+      }
+
+      // Get VAPID key
+      const vapidRes = await fetch("/api/vapid-key");
+      const vapidData = (await vapidRes.json()) as { publicKey?: string };
+      if (!vapidData.publicKey) {
+        setStatus("Server configuration error: no VAPID key.");
+        return;
+      }
+
+      // Create subscription
+      const padding = "=".repeat(
+        (4 - (vapidData.publicKey.length % 4)) % 4
+      );
+      const base64 = (vapidData.publicKey + padding)
+        .replace(/-/g, "+")
+        .replace(/_/g, "/");
+      const rawData = window.atob(base64);
+      const applicationServerKey = new Uint8Array(rawData.length);
+      for (let i = 0; i < rawData.length; i++) {
+        applicationServerKey[i] = rawData.charCodeAt(i);
+      }
+
+      const subscription = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey,
+      });
+
+      if (!subscription) {
+        setStatus("Failed to create push subscription.");
+        setCanEnable(true);
+        return;
+      }
+
+      // Save to server
+      const res = await fetch("/api/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          deviceId,
+          subscription: subscription.toJSON(),
+        }),
+      });
+
+      if (!res.ok) {
+        setStatus("Failed to save subscription to server.");
+        setCanEnable(true);
+        return;
+      }
+
+      setStatus("Notifications are now enabled.");
+    } catch (e) {
+      setStatus(`Error: ${e}`);
+      setCanEnable(true);
+    }
+  }, [deviceId]);
 
   return (
     <main style={styles.page}>
-      <nav style={styles.nav}>
-        <Link href="/about" style={styles.backLink}>
-          ← Back
-        </Link>
-      </nav>
       <div style={styles.container}>
+        <nav style={styles.nav}>
+          <Link href="/" style={styles.backLink}>
+            ← Back
+          </Link>
+        </nav>
         <h1 style={styles.h1}>Notifications</h1>
 
-        <section style={styles.card}>
-          <div style={styles.statusLine}>
-            <span style={styles.statusLabel}>Notifications:</span>
-            <span style={styles.statusValue}>{statusText}</span>
-          </div>
-          <div style={styles.secondaryText}>{notificationStatus?.secondaryText ?? ""}</div>
+        <p style={styles.statusText}>{status}</p>
 
-          <div style={styles.buttonRow}>
-            <button
-              type="button"
-              onClick={handlePrimary}
-              disabled={
-                actionState === "working" || notificationStatus?.permission === "unsupported"
-              }
-              style={{
-                ...styles.primaryButton,
-                opacity: actionState === "working" ? 0.6 : 1,
-              }}
-            >
-              {primaryLabel}
-            </button>
-            {showTestButton ? (
-              <button
-                type="button"
-                onClick={handleTest}
-                disabled={actionState === "working"}
-                style={{
-                  ...styles.secondaryButton,
-                  opacity: actionState === "working" ? 0.6 : 1,
-                }}
-              >
-                Send test buzz
-              </button>
-            ) : null}
-          </div>
-
-          {actionMessage ? (
-            <div style={styles.notice}>{actionMessage}</div>
-          ) : null}
-
-          {testMessage ? <div style={styles.notice}>{testMessage}</div> : null}
-
-          {helpOpen ? (
-            <div style={styles.helpPanel}>
-              <div style={styles.helpTitle}>Enable notifications on iPhone</div>
-              <ol style={styles.helpList}>
-                <li>Settings → Notifications → find “Cooling” → Allow Notifications.</li>
-                <li>If missing, remove the Home Screen icon and Add to Home Screen again.</li>
-                <li>Reopen Cooling and tap “Fix notifications.”</li>
-              </ol>
-            </div>
-          ) : null}
-        </section>
+        {canEnable && (
+          <button
+            type="button"
+            onClick={enableNotifications}
+            style={styles.button}
+          >
+            Enable notifications
+          </button>
+        )}
       </div>
     </main>
   );
@@ -262,8 +159,13 @@ const styles: Record<string, React.CSSProperties> = {
     minHeight: "100vh",
     color: "#111",
   },
+  container: {
+    maxWidth: 680,
+    margin: "0 auto",
+    padding: "24px 18px 48px",
+  },
   nav: {
-    padding: "16px 18px 0",
+    marginBottom: 8,
   },
   backLink: {
     fontSize: 13,
@@ -271,86 +173,25 @@ const styles: Record<string, React.CSSProperties> = {
     color: "inherit",
     opacity: 0.6,
   },
-  container: {
-    maxWidth: 560,
-    margin: "0 auto",
-    padding: "16px 18px 48px",
-  },
   h1: {
     fontSize: 20,
     fontWeight: 600,
-    margin: "8px 0 16px",
+    margin: "4px 0 24px",
     letterSpacing: 0.2,
   },
-  card: {
-    borderRadius: 12,
-    border: "1px solid rgba(0,0,0,0.08)",
-    padding: "16px",
-    display: "flex",
-    flexDirection: "column",
-    gap: 12,
-  },
-  statusLine: {
-    display: "flex",
-    gap: 6,
-    alignItems: "baseline",
-  },
-  statusLabel: {
+  statusText: {
     fontSize: 14,
-    fontWeight: 600,
+    lineHeight: 1.5,
+    opacity: 0.85,
+    marginBottom: 20,
   },
-  statusValue: {
+  button: {
     fontSize: 14,
-    opacity: 0.8,
-  },
-  secondaryText: {
-    fontSize: 12.5,
-    opacity: 0.6,
-    minHeight: 18,
-  },
-  buttonRow: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 10,
-  },
-  primaryButton: {
-    fontSize: 14,
-    padding: "10px 16px",
-    border: "1px solid rgba(0,0,0,0.2)",
+    padding: "12px 20px",
+    border: "1px solid rgba(0,0,0,0.15)",
     borderRadius: 8,
     background: "#fff",
     cursor: "pointer",
-  },
-  secondaryButton: {
-    fontSize: 13,
-    padding: "9px 16px",
-    border: "1px solid rgba(0,0,0,0.12)",
-    borderRadius: 8,
-    background: "rgba(0,0,0,0.04)",
-    cursor: "pointer",
-  },
-  notice: {
-    fontSize: 12.5,
-    opacity: 0.7,
-  },
-  helpPanel: {
-    borderRadius: 10,
-    border: "1px solid rgba(0,0,0,0.08)",
-    background: "rgba(0,0,0,0.02)",
-    padding: "12px 12px 10px",
-    display: "flex",
-    flexDirection: "column",
-    gap: 8,
-  },
-  helpTitle: {
-    fontSize: 13,
-    fontWeight: 600,
-  },
-  helpList: {
-    margin: 0,
-    paddingLeft: 18,
-    fontSize: 12.5,
-    lineHeight: 1.45,
-    opacity: 0.8,
+    color: "#111",
   },
 };
