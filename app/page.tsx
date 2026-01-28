@@ -603,6 +603,10 @@ export default function HomePage() {
         <Link href="/api/debug" style={styles.footerLink}>
           Debug
         </Link>
+        <span style={styles.footerSep}>·</span>
+        <Link href="/api/test-push" style={styles.footerLink}>
+          Test Push
+        </Link>
       </footer>
       {debugPanel}
     </main>
