@@ -168,6 +168,9 @@ async function encryptPayload(
   const subscriberPublicKey = base64UrlDecode(p256dh);
   const authSecret = base64UrlDecode(auth);
 
+  // Generate salt FIRST - it's needed for key derivation
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+
   // Generate ephemeral key pair
   const ephemeralKeyPair = await crypto.subtle.generateKey(
     { name: 'ECDH', namedCurve: 'P-256' },
@@ -197,12 +200,13 @@ async function encryptPayload(
     ephemeralKeyPair.publicKey
   );
 
-  // Derive encryption key and nonce using HKDF
+  // Derive encryption key and nonce using HKDF (salt is required!)
   const { key, nonce } = await deriveKeyAndNonce(
     sharedSecret,
     authSecret,
     ephemeralPublicKey,
-    subscriberPublicKey
+    subscriberPublicKey,
+    salt
   );
 
   // Encrypt with AES-GCM
@@ -214,7 +218,6 @@ async function encryptPayload(
   );
 
   // Build the aes128gcm content
-  const salt = crypto.getRandomValues(new Uint8Array(16));
   const recordSize = new Uint8Array(4);
   new DataView(toArrayBuffer(recordSize)).setUint32(0, 4096, false);
 
@@ -233,13 +236,14 @@ async function encryptPayload(
 }
 
 /**
- * Derive encryption key and nonce using HKDF
+ * Derive encryption key and nonce using HKDF (RFC 8291)
  */
 async function deriveKeyAndNonce(
   sharedSecret: ArrayBuffer,
   authSecret: ArrayBuffer,
   ephemeralPublicKey: ArrayBuffer,
-  subscriberPublicKey: ArrayBuffer
+  subscriberPublicKey: ArrayBuffer,
+  salt: Uint8Array
 ): Promise<{ key: CryptoKey; nonce: Uint8Array }> {
   // Import shared secret for HKDF
   const sharedKey = await crypto.subtle.importKey(
@@ -250,7 +254,7 @@ async function deriveKeyAndNonce(
     ['deriveBits']
   );
 
-  // PRK = HKDF-Extract(auth_secret, shared_secret)
+  // PRK = HKDF-Extract(auth_secret, shared_secret) with WebPush info
   const info = createInfo('WebPush: info\0', new Uint8Array(subscriberPublicKey), new Uint8Array(ephemeralPublicKey));
   const prkBits = await crypto.subtle.deriveBits(
     { name: 'HKDF', salt: authSecret, info: toArrayBuffer(info), hash: 'SHA-256' },
@@ -266,20 +270,20 @@ async function deriveKeyAndNonce(
     ['deriveBits', 'deriveKey']
   );
 
-  // Content encryption key
+  // Content encryption key - use salt from header
   const cekInfo = new TextEncoder().encode('Content-Encoding: aes128gcm\0');
   const key = await crypto.subtle.deriveKey(
-    { name: 'HKDF', salt: new ArrayBuffer(0), info: toArrayBuffer(cekInfo), hash: 'SHA-256' },
+    { name: 'HKDF', salt: toArrayBuffer(salt), info: toArrayBuffer(cekInfo), hash: 'SHA-256' },
     prkKey,
     { name: 'AES-GCM', length: 128 },
     false,
     ['encrypt']
   );
 
-  // Nonce
+  // Nonce - use salt from header
   const nonceInfo = new TextEncoder().encode('Content-Encoding: nonce\0');
   const nonceBits = await crypto.subtle.deriveBits(
-    { name: 'HKDF', salt: new ArrayBuffer(0), info: toArrayBuffer(nonceInfo), hash: 'SHA-256' },
+    { name: 'HKDF', salt: toArrayBuffer(salt), info: toArrayBuffer(nonceInfo), hash: 'SHA-256' },
     prkKey,
     96
   );
