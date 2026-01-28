@@ -251,84 +251,18 @@ export default function HomePage() {
   async function subscribeToPush() {
     logDebug("push: starting subscription flow");
 
-    if (!("PushManager" in window)) {
-      logDebug("push: PushManager not available");
+    if (!("Notification" in window)) {
+      logDebug("push: Notification API not available");
       return;
     }
-    if (!("serviceWorker" in navigator)) {
-      logDebug("push: serviceWorker not available");
+    if (Notification.permission !== "granted") {
+      logDebug("push: permission not granted");
       return;
     }
 
     try {
-      logDebug("push: waiting for service worker ready");
-      const registration = await navigator.serviceWorker.ready;
-      logDebug("push: service worker ready");
-
-      let subscription = await registration.pushManager.getSubscription();
-      logDebug(`push: existing subscription: ${subscription ? "yes" : "no"}`);
-
-      if (!subscription) {
-        logDebug("push: requesting notification permission");
-        const permission = await Notification.requestPermission();
-        logDebug(`push: permission result: ${permission}`);
-        if (permission !== "granted") {
-          logDebug("push: permission denied, aborting");
-          return;
-        }
-
-        // Get VAPID public key from server
-        logDebug("push: fetching VAPID key");
-        const vapidRes = await fetch("/api/vapid-key");
-        const vapidData = await vapidRes.json() as { publicKey?: string };
-        logDebug(`push: VAPID key: ${vapidData.publicKey ? "present" : "MISSING"}`);
-        if (!vapidData.publicKey) {
-          logDebug("push: no VAPID key, aborting");
-          return;
-        }
-
-        // Convert base64 to Uint8Array
-        const urlBase64ToUint8Array = (base64String: string) => {
-          const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-          const base64 = (base64String + padding)
-            .replace(/-/g, "+")
-            .replace(/_/g, "/");
-          const rawData = window.atob(base64);
-          const outputArray = new Uint8Array(rawData.length);
-          for (let i = 0; i < rawData.length; ++i) {
-            outputArray[i] = rawData.charCodeAt(i);
-          }
-          return outputArray;
-        };
-
-        // Create subscription
-        logDebug("push: creating subscription");
-        subscription = await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(vapidData.publicKey),
-        });
-        logDebug(`push: subscription created: ${subscription ? "yes" : "no"}`);
-      }
-
-      if (subscription) {
-        logDebug("push: sending subscription to server");
-        const res = await fetch("/api/subscribe", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            deviceId,
-            subscription: subscription.toJSON(),
-          }),
-        });
-        if (!res.ok) {
-          const body = await res.text();
-          logDebug(`push: server save failed (${res.status}) ${body}`);
-          return;
-        }
-        logDebug("push: subscription saved to server");
-      } else {
-        logDebug("push: no subscription to save");
-      }
+      await ensurePushSubscription({ forceResubscribe: false });
+      logDebug("push: subscription ensured");
     } catch (e) {
       console.error("Push subscription failed:", e);
       logDebug(`push: error - ${e}`);
@@ -650,19 +584,6 @@ function formatCode(code: string): string {
   const clean = code.replace(/-/g, "").toUpperCase();
   if (clean.length <= 4) return clean;
   return `${clean.slice(0, 4)}-${clean.slice(4, 8)}`;
-}
-
-function urlBase64ToUint8Array(base64String: string): Uint8Array {
-  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const rawData = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-
-  for (let i = 0; i < rawData.length; i += 1) {
-    outputArray[i] = rawData.charCodeAt(i);
-  }
-
-  return outputArray;
 }
 
 const styles: Record<string, React.CSSProperties> = {

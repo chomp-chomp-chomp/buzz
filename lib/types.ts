@@ -21,6 +21,8 @@ export interface Member {
   push_endpoint: string | null;
   push_p256dh: string | null;
   push_auth: string | null;
+  push_user_agent?: string | null;
+  push_updated_at?: number | null;
   last_chomp_at: number | null;
   last_received_at: number | null;
   created_at: number;

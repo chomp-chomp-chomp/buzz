@@ -19,6 +19,8 @@ CREATE TABLE IF NOT EXISTS members (
   push_endpoint TEXT,
   push_p256dh TEXT,
   push_auth TEXT,
+  push_user_agent TEXT,
+  push_updated_at INTEGER,
   last_chomp_at INTEGER,
   last_received_at INTEGER,
   created_at INTEGER NOT NULL DEFAULT (unixepoch())

@@ -56,3 +56,12 @@ Additional documentation is available within the app itself.
 ## Status
 
 This project is complete by design.
+
+---
+
+## Notifications manual checklist
+
+- iOS installed: default → enable → subscribed → test push works
+- denied → help panel shown
+- granted but no subscription → fix → subscribed
+- subscription expired → fix → resubscribed

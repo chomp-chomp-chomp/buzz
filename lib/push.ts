@@ -8,6 +8,13 @@ interface PushPayload {
   body: string;
 }
 
+type PushSendResult = {
+  ok: boolean;
+  status?: number;
+  reason?: string;
+  endpointHost?: string;
+};
+
 // Helper to convert Uint8Array to ArrayBuffer (for strict TypeScript)
 function toArrayBuffer(arr: Uint8Array): ArrayBuffer {
   return arr.buffer.slice(arr.byteOffset, arr.byteOffset + arr.byteLength) as ArrayBuffer;
@@ -24,9 +31,31 @@ export async function sendPushNotification(
   vapidPrivateKey: string,
   vapidSubject: string
 ): Promise<boolean> {
+  const result = await sendPushNotificationWithResult(
+    member,
+    payload,
+    vapidPublicKey,
+    vapidPrivateKey,
+    vapidSubject
+  );
+
+  return result.ok;
+}
+
+export async function sendPushNotificationWithResult(
+  member: Member,
+  payload: PushPayload,
+  vapidPublicKey: string,
+  vapidPrivateKey: string,
+  vapidSubject: string
+): Promise<PushSendResult> {
+  const endpointHost = member.push_endpoint
+    ? new URL(member.push_endpoint).host
+    : undefined;
+
   if (!member.push_endpoint || !member.push_p256dh || !member.push_auth) {
     console.log('Push: Missing push credentials for member');
-    return false;
+    return { ok: false, status: 400, reason: 'Missing push credentials.', endpointHost };
   }
 
   try {
@@ -75,15 +104,17 @@ export async function sendPushNotification(
       body: toArrayBuffer(encryptedPayload),
     });
 
-    if (!response.ok && response.status !== 201) {
-      const text = await response.text().catch(() => '');
-      console.error('Push failed:', response.status, text);
+    const ok = response.ok || response.status === 201;
+    const reason = ok ? undefined : await response.text().catch(() => '');
+    if (!ok) {
+      console.error('Push failed:', response.status, reason);
     }
 
-    return response.ok || response.status === 201;
+    return { ok, status: response.status, reason, endpointHost };
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     console.error('Push notification failed:', error);
-    return false;
+    return { ok: false, status: 500, reason: message, endpointHost };
   }
 }
 
