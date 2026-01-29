@@ -218,6 +218,19 @@ export default function HomePage() {
     };
   }, [appState, fetchStatus]);
 
+  // Poll for status updates while app is open (detects incoming chomps)
+  useEffect(() => {
+    if (appState !== "ready") return;
+
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        fetchStatus();
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [appState, fetchStatus]);
+
   // Oven timer countdown
   useEffect(() => {
     if (!lastSentAt && !lastReceivedAt) return;

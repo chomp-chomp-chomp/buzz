@@ -85,23 +85,15 @@ export async function sendPushNotificationWithResult(
       privateKey
     );
 
-    // Encrypt the payload
-    const encryptedPayload = await encryptPayload(
-      JSON.stringify(payload),
-      member.push_p256dh,
-      member.push_auth
-    );
-
-    // Send the push message
+    // Send push without encrypted payload (ping-style)
+    // The service worker handles null data with a default notification
     const response = await fetch(member.push_endpoint, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/octet-stream',
-        'Content-Encoding': 'aes128gcm',
+        'Content-Length': '0',
         'TTL': '86400',
         'Authorization': `vapid t=${jwt}, k=${vapidPublicKey}`,
       },
-      body: toArrayBuffer(encryptedPayload),
     });
 
     const ok = response.ok || response.status === 201;
