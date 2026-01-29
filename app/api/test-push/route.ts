@@ -118,24 +118,14 @@ async function testPush(
     const jwt = await createVapidJwt(member.push_endpoint!, vapidSubject, privateKey);
     steps.push(`JWT created: ${jwt.substring(0, 50)}...`);
 
-    steps.push('Encrypting payload');
-    const encryptedPayload = await encryptPayload(
-      JSON.stringify(payload),
-      member.push_p256dh!,
-      member.push_auth!
-    );
-    steps.push(`Payload encrypted: ${encryptedPayload.length} bytes`);
-
-    steps.push('Sending to push endpoint');
+    steps.push('Sending push ping (no payload)');
     const response = await fetch(member.push_endpoint!, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/octet-stream',
-        'Content-Encoding': 'aes128gcm',
+        'Content-Length': '0',
         'TTL': '86400',
         'Authorization': `vapid t=${jwt}, k=${vapidPublicKey}`,
       },
-      body: toArrayBuffer(encryptedPayload),
     });
 
     const responseText = await response.text().catch(() => '');

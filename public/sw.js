@@ -1,7 +1,7 @@
 // Cooling Service Worker v2
 // Push notifications + in-app messaging
 
-const CACHE_NAME = 'cooling-v2';
+const CACHE_NAME = 'cooling-v3';
 
 // Install event - force activate new version immediately
 self.addEventListener('install', (event) => {
@@ -24,13 +24,13 @@ self.addEventListener('activate', (event) => {
 
 // Push event - show notification AND notify active clients
 self.addEventListener('push', (event) => {
-  if (!event.data) return;
-
-  let data;
-  try {
-    data = event.data.json();
-  } catch (e) {
-    data = { title: 'Chomp', body: '' };
+  let data = { title: 'Chomp', body: '' };
+  if (event.data) {
+    try {
+      data = event.data.json();
+    } catch (e) {
+      // Use default
+    }
   }
 
   const title = data.title || 'Chomp';
