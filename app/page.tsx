@@ -659,10 +659,6 @@ export default function HomePage() {
         <Link href="/about" style={styles.footerLink}>
           About
         </Link>
-        <span style={styles.footerSep}>·</span>
-        <Link href="/debug/utilities" style={styles.footerLink}>
-          Debug
-        </Link>
       </footer>
       {debugPanel}
     </main>

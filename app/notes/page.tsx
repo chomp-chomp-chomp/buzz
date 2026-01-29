@@ -289,7 +289,7 @@ export default function Notes() {
 
         <div style={styles.fixLink}>
           <Link href="/notifications" style={styles.subtleLink}>
-            Fix notifications
+            Enable notifications
           </Link>
         </div>
       </div>
